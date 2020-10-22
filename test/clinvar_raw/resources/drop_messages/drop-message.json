@@ -1,0 +1,25 @@
+{
+  "release_date": "2019-04-03",
+  "bucket": "broad-dsp-monster-clingen-dev-ingest-results",
+  "files": [
+    "backfill_2019_04/clinical_assertion/created/000000000000",
+    "backfill_2019_04/clinical_assertion/created/000000000001",
+    "backfill_2019_04/clinical_assertion_observation/created/000000000000",
+    "backfill_2019_04/clinical_assertion_trait/created/000000000000",
+    "backfill_2019_04/clinical_assertion_trait_set/created/000000000000",
+    "backfill_2019_04/clinical_assertion_variation/created/000000000000",
+    "backfill_2019_04/gene/created/000000000000",
+    "backfill_2019_04/gene_association/created/000000000000",
+    "backfill_2019_04/gene_association/created/000000000001",
+    "backfill_2019_04/rcv_accession/created/000000000000",
+    "backfill_2019_04/submission/created/000000000000",
+    "backfill_2019_04/submitter/created/000000000000",
+    "backfill_2019_04/trait/created/000000000000",
+    "backfill_2019_04/trait_mapping/created/000000000000",
+    "backfill_2019_04/trait_set/created/000000000000",
+    "backfill_2019_04/variation/created/000000000000",
+    "backfill_2019_04/variation/created/000000000001",
+    "backfill_2019_04/variation/created/000000000002",
+    "backfill_2019_04/variation_archive/created/000000000000"
+  ]
+}

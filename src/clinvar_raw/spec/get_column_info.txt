@@ -1,0 +1,133 @@
+clinical_assertion assertion_type STRING optional (0/793325 0.0000% null)
+clinical_assertion clinical_assertion_observation_ids ARRAY<STRING> required (0/793325 0.0000% empty arrays)
+clinical_assertion clinical_assertion_trait_set_id STRING optional (0/793325 0.0000% null)
+clinical_assertion content STRING optional (83014/793325 10.4641% null)
+clinical_assertion date_created DATE optional (0/793325 0.0000% null)
+clinical_assertion date_last_updated DATE optional (0/793325 0.0000% null)
+clinical_assertion id STRING required
+clinical_assertion internal_id STRING required
+clinical_assertion interpretation_comments ARRAY<STRING> required (506192/793325 63.8064% empty arrays)
+clinical_assertion interpretation_date_last_evaluated DATE optional (53546/793325 6.7496% null)
+clinical_assertion interpretation_description STRING optional (3/793325 0.0004% null)
+clinical_assertion local_key STRING optional (0/793325 0.0000% null)
+clinical_assertion rcv_accession_id STRING optional (42858/793325 5.4023% null)
+clinical_assertion record_status STRING optional (0/793325 0.0000% null)
+clinical_assertion review_status STRING optional (0/793325 0.0000% null)
+clinical_assertion submission_id STRING required
+clinical_assertion submission_names ARRAY<STRING> required (126974/793325 16.0053% empty arrays)
+clinical_assertion submitted_assembly STRING optional (120043/793325 15.1316% null)
+clinical_assertion submitter_id STRING required
+clinical_assertion title STRING optional (751375/793325 94.7121% null)
+clinical_assertion trait_set_id STRING optional (42815/793325 5.3969% null)
+clinical_assertion variation_archive_id STRING required
+clinical_assertion variation_id STRING required
+clinical_assertion version INT64 required
+clinical_assertion_observation clinical_assertion_trait_set_id STRING optional (790175/843806 93.6442% null)
+clinical_assertion_observation content STRING optional (0/843806 0.0000% null)
+clinical_assertion_observation id STRING required
+clinical_assertion_trait alternate_names ARRAY<STRING> required (961993/963694 99.8235% empty arrays)
+clinical_assertion_trait content STRING optional (962252/963694 99.8504% null)
+clinical_assertion_trait id STRING required
+clinical_assertion_trait medgen_id STRING optional (106514/963694 11.0527% null)
+clinical_assertion_trait name STRING optional (243886/963694 25.3074% null)
+clinical_assertion_trait trait_id STRING optional (26264/963694 2.7253% null)
+clinical_assertion_trait type STRING optional (0/963694 0.0000% null)
+clinical_assertion_trait xrefs ARRAY<STRING> required (780355/963694 80.9754% empty arrays)
+clinical_assertion_trait_set clinical_assertion_trait_ids ARRAY<STRING> required (0/846956 0.0000% empty arrays)
+clinical_assertion_trait_set content STRING optional (842453/846956 99.4683% null)
+clinical_assertion_trait_set id STRING required
+clinical_assertion_trait_set type STRING optional (0/846956 0.0000% null)
+clinical_assertion_variation child_ids ARRAY<STRING> required (793606/793878 99.9657% empty arrays)
+clinical_assertion_variation clinical_assertion_id STRING required
+clinical_assertion_variation content STRING optional (147/793878 0.0185% null)
+clinical_assertion_variation descendant_ids ARRAY<STRING> required (793606/793878 99.9657% empty arrays)
+clinical_assertion_variation id STRING required
+clinical_assertion_variation subclass_type STRING required
+clinical_assertion_variation variation_type STRING optional (201/793878 0.0253% null)
+gene full_name STRING optional (0/30273 0.0000% null)
+gene hgnc_id STRING optional (3755/30273 12.4038% null)
+gene id STRING required
+gene symbol STRING optional (0/30273 0.0000% null)
+gene_association content STRING optional (0/1373274 0.0000% null)
+gene_association gene_id STRING required
+gene_association relationship_type STRING optional (0/1373274 0.0000% null)
+gene_association source STRING optional (0/1373274 0.0000% null)
+gene_association variation_id STRING required
+rcv_accession content STRING optional (704072/704072 100.0000% null)
+rcv_accession date_last_evaluated DATE optional (37987/704072 5.3953% null)
+rcv_accession id STRING required
+rcv_accession independent_observations INT64 optional (704072/704072 100.0000% null)
+rcv_accession interpretation STRING optional (0/704072 0.0000% null)
+rcv_accession review_status STRING optional (0/704072 0.0000% null)
+rcv_accession submission_count INT64 optional (0/704072 0.0000% null)
+rcv_accession title STRING optional (0/704072 0.0000% null)
+rcv_accession trait_set_id STRING optional (11/704072 0.0016% null)
+rcv_accession variation_archive_id STRING required
+rcv_accession variation_id STRING required
+rcv_accession version INT64 required
+submission additional_submitter_ids ARRAY<STRING> required (4931/5014 98.3446% empty arrays)
+submission id STRING required
+submission submission_date DATE required
+submission submitter_id STRING required
+submitter all_abbrevs ARRAY<STRING> required (1016/1251 81.2150% empty arrays)
+submitter all_names ARRAY<STRING> required (0/1251 0.0000% empty arrays)
+submitter current_abbrev STRING optional (1016/1251 81.2150% null)
+submitter current_name STRING optional (0/1251 0.0000% null)
+submitter id STRING required
+submitter org_category STRING optional (0/1251 0.0000% null)
+trait alternate_names ARRAY<STRING> required (7180/11635 61.7104% empty arrays)
+trait alternate_symbols ARRAY<STRING> required (10109/11635 86.8844% empty arrays)
+trait attribute_content ARRAY<STRING> required (11622/11635 99.8883% empty arrays)
+trait content STRING optional (9513/11635 81.7619% null)
+trait disease_mechanism STRING optional (11412/11635 98.0834% null)
+trait disease_mechanism_id INT64 optional (11423/11635 98.1779% null)
+trait gard_id INT64 optional (11635/11635 100.0000% null)
+trait gene_reviews_short STRING optional (11630/11635 99.9570% null)
+trait ghr_links STRING optional (11614/11635 99.8195% null)
+trait id STRING required
+trait keywords ARRAY<STRING> required (11431/11635 98.2467% empty arrays)
+trait medgen_id STRING optional (1893/11635 16.2699% null)
+trait mode_of_inheritance STRING optional (11605/11635 99.7422% null)
+trait name STRING optional (2/11635 0.0172% null)
+trait public_definition STRING optional (9366/11635 80.4985% null)
+trait symbol STRING optional (6426/11635 55.2299% null)
+trait type STRING optional (0/11635 0.0000% null)
+trait xrefs ARRAY<STRING> required (1546/11635 13.2875% empty arrays)
+trait_mapping clinical_assertion_id STRING required
+trait_mapping mapping_ref STRING required
+trait_mapping mapping_type STRING required
+trait_mapping mapping_value STRING required
+trait_mapping medgen_id STRING optional (17138/318685 5.3777% null)
+trait_mapping medgen_name STRING optional (0/318685 0.0000% null)
+trait_mapping trait_type STRING required
+trait_set content STRING optional (12183/12185 99.9836% null)
+trait_set id STRING required
+trait_set trait_ids ARRAY<STRING> required (0/12185 0.0000% empty arrays)
+trait_set type STRING optional (0/12185 0.0000% null)
+variation allele_id STRING optional (434/502292 0.0864% null)
+variation child_ids ARRAY<STRING> required (501858/502292 99.9136% empty arrays)
+variation content STRING optional (56/502292 0.0111% null)
+variation descendant_ids ARRAY<STRING> required (501858/502292 99.9136% empty arrays)
+variation id STRING required
+variation name STRING optional (0/502292 0.0000% null)
+variation num_chromosomes INT64 optional (502292/502292 100.0000% null)
+variation num_copies INT64 optional (501929/502292 99.9277% null)
+variation protein_change ARRAY<STRING> required (283083/502292 56.3583% empty arrays)
+variation subclass_type STRING required
+variation variation_type STRING optional (0/502292 0.0000% null)
+variation_archive content STRING optional (495655/502292 98.6787% null)
+variation_archive date_created DATE optional (0/502292 0.0000% null)
+variation_archive date_last_updated DATE optional (0/502292 0.0000% null)
+variation_archive id STRING required
+variation_archive interp_content STRING optional (0/502292 0.0000% null)
+variation_archive interp_date_last_evaluated DATE optional (28696/502292 5.7130% null)
+variation_archive interp_description STRING optional (0/502292 0.0000% null)
+variation_archive interp_explanation STRING optional (481290/502292 95.8188% null)
+variation_archive interp_type STRING optional (0/502292 0.0000% null)
+variation_archive num_submissions INT64 optional (0/502292 0.0000% null)
+variation_archive num_submitters INT64 optional (0/502292 0.0000% null)
+variation_archive record_status STRING optional (0/502292 0.0000% null)
+variation_archive review_status STRING optional (0/502292 0.0000% null)
+variation_archive species STRING optional (0/502292 0.0000% null)
+variation_archive variation_id STRING required
+variation_archive version INT64 required

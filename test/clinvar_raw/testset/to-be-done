@@ -1,0 +1,8 @@
+Tests needed still...
+
+1. a test that shows missing fks  for example, rcv_accession.trait_set = NULL (and more complex scenarios)
+2. haplotype
+3. genotype
+4. a variant that changes over time from del to microsatellite
+5. deleted vcv, deleted rcv, deleted scv
+6. "replaced by"
