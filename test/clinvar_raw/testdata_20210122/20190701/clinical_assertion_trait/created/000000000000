@@ -1,0 +1,155 @@
+{"id":"SCV000028838.0","medgen_id":"C1832288","trait_id":"10405","type":"Disease","alternate_names":["CORONARY ARTERY DISEASE, RESISTANCE TO"],"xrefs":[]}
+{"id":"SCV000044400.0","medgen_id":"C3151079","trait_id":"16133","type":"Disease","alternate_names":["MACULAR DEGENERATION, AGE-RELATED, 12, SUSCEPTIBILITY TO"],"xrefs":[]}
+{"name":"HUMAN IMMUNODEFICIENCY VIRUS TYPE 1, RAPID PROGRESSION TO AIDS","id":"SCV000028837.0","medgen_id":"C4016733","trait_id":"10404","type":"Disease","alternate_names":[],"xrefs":[]}
+{"id":"SCV000616365.0","medgen_id":"C0587248","trait_id":"4860","type":"Disease","alternate_names":[],"xrefs":["{\"db\":\"Orphanet\",\"id\":\"ORPHA3071\"}"]}
+{"id":"SCV000062127.0","medgen_id":"C0587248","trait_id":"4860","type":"Disease","alternate_names":[],"xrefs":["{\"db\":\"OMIM\",\"id\":\"218040\",\"type\":\"MIM\"}"]}
+{"name":"COSTELLO SYNDROME","id":"SCV000033691.0","medgen_id":"C0587248","trait_id":"4860","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"Costello syndrome","id":"SCV000188769.0","medgen_id":"C0587248","trait_id":"4860","type":"Disease","alternate_names":[],"xrefs":[]}
+{"id":"SCV000505736.0","medgen_id":"C0038356","trait_id":"15950","type":"Disease","alternate_names":[],"xrefs":["{\"db\":\"MeSH\",\"id\":\"D013274\"}"]}
+{"id":"SCV000106043.0","medgen_id":"C1856059","trait_id":"9286","type":"Disease","alternate_names":[],"xrefs":[]}
+{"id":"SCV000891532.0","medgen_id":"C3160733","trait_id":"24727","type":"Finding","alternate_names":[],"xrefs":["{\"db\":\"OMIM\",\"id\":\"188050\",\"type\":\"MIM\"}"]}
+{"name":"Not Provided","id":"SCV000884146.0","medgen_id":"CN517202","trait_id":"17556","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"not provided","id":"SCV000203040.0","medgen_id":"CN517202","trait_id":"17556","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"not specified","id":"SCV000519504.0","medgen_id":"CN169374","trait_id":"16789","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"Gastrointestinal Stromal Tumors","id":"SCV000187678.0","medgen_id":"C0238198","trait_id":"2160","type":"Disease","alternate_names":[],"xrefs":["{\"db\":\"OMIM\",\"id\":\"606764\",\"type\":\"MIM\"}"]}
+{"name":"MTHFR THERMOLABILE POLYMORPHISM","id":"SCV000023860.0","medgen_id":"C1856059","trait_id":"9286","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"carboplatin response - Efficacy","content":"{\"TraitRelationship\":{\"@Type\":\"DrugResponseAndDisease\",\"Name\":{\"ElementValue\":{\"$\":\"Carcinoma, Non-Small-Cell Lung\",\"@Type\":\"Preferred\"}}}}","id":"SCV000268238.0","medgen_id":"CN236495","trait_id":"35411","type":"DrugResponse","alternate_names":[],"xrefs":[]}
+{"name":"Neural Tube Defects, Folate-Sensitive","id":"SCV000347807.0","medgen_id":"C1866558","trait_id":"3449","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"cyclophosphamide response - Toxicity/ADR","id":"SCV000268236.0","medgen_id":"CN236519","trait_id":"35435","type":"DrugResponse","alternate_names":[],"xrefs":[]}
+{"name":"methotrexate response - Dosage, Efficacy, Toxicity/ADR","content":"{\"TraitRelationship\":{\"@Type\":\"DrugResponseAndDisease\",\"Name\":{\"ElementValue\":{\"$\":\"Neoplasms\",\"@Type\":\"Preferred\"}}}}","id":"SCV000494694.0","medgen_id":"CN240598","trait_id":"36887","type":"DrugResponse","alternate_names":[],"xrefs":[]}
+{"id":"SCV000895101.0","medgen_id":"C0006142","trait_id":"536","type":"Disease","alternate_names":[],"xrefs":["{\"db\":\"OMIM\",\"id\":\"114480\",\"type\":\"MIM\"}"]}
+{"id":"SCV000274232.0","medgen_id":"C0027672","trait_id":"18746","type":"Disease","alternate_names":[],"xrefs":[]}
+{"id":"SCV000895101.1","medgen_id":"C2676676","trait_id":"4711","type":"Disease","alternate_names":[],"xrefs":["{\"db\":\"OMIM\",\"id\":\"604370\",\"type\":\"MIM\"}"]}
+{"id":"SCV000895101.2","medgen_id":"C3280442","trait_id":"12826","type":"Disease","alternate_names":[],"xrefs":["{\"db\":\"OMIM\",\"id\":\"614320\",\"type\":\"MIM\"}"]}
+{"id":"SCV000895101.3","medgen_id":"C4554406","trait_id":"38588","type":"Disease","alternate_names":[],"xrefs":["{\"db\":\"OMIM\",\"id\":\"617883\",\"type\":\"MIM\"}"]}
+{"id":"SCV000265873.0","medgen_id":"CN221572","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"Not Provided","id":"SCV000570422.0","medgen_id":"CN517202","trait_id":"17556","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"Breast-ovarian cancer, familial 1","id":"SCV000053775.0","medgen_id":"C2676676","trait_id":"4711","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"Hereditary cancer-predisposing syndrome","id":"SCV000910906.0","medgen_id":"C0027672","trait_id":"18746","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"Hereditary breast and ovarian cancer syndrome","id":"SCV000549301.0","medgen_id":"C0677776","trait_id":"16761","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"not provided","id":"SCV000706730.0","medgen_id":"CN517202","trait_id":"17556","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"not specified","id":"SCV000063451.0","medgen_id":"CN169374","trait_id":"16789","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"not specified","id":"SCV000729392.0","medgen_id":"CN169374","trait_id":"16789","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"Usher Syndrome","id":"SCV000363107.0","medgen_id":"CN033130","trait_id":"4348","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"Nonsyndromic Hearing Loss, Recessive","id":"SCV000363106.0","medgen_id":"CN239439","trait_id":"36636","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"not provided","id":"SCV000704632.0","medgen_id":"CN517202","trait_id":"17556","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"not specified","id":"SCV000065162.0","medgen_id":"CN169374","trait_id":"16789","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"Nonsyndromic Hearing Loss, Recessive","id":"SCV000429634.0","medgen_id":"CN239439","trait_id":"36636","type":"Disease","alternate_names":[],"xrefs":[]}
+{"id":"SCV000599010.0","medgen_id":"C0730290","trait_id":"21734","type":"Finding","alternate_names":[],"xrefs":["{\"db\":\"HP\",\"id\":\"HP:0000548\"}"]}
+{"id":"SCV000281950.0","medgen_id":"C1855465","trait_id":"3842","type":"Disease","alternate_names":[],"xrefs":["{\"db\":\"OMIM\",\"id\":\"248200\",\"type\":\"MIM\"}"]}
+{"name":"Not Provided","id":"SCV000511911.0","medgen_id":"CN517202","trait_id":"17556","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"not provided","id":"SCV000117933.0","medgen_id":"CN517202","trait_id":"17556","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"not specified","id":"SCV000110530.0","medgen_id":"CN169374","trait_id":"16789","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"STARGARDT DISEASE 1","id":"SCV000028543.0","medgen_id":"C1855465","trait_id":"3842","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"Macular Degeneration","id":"SCV000359226.0","medgen_id":"C0024437","trait_id":"21784","type":"Finding","alternate_names":[],"xrefs":[]}
+{"name":"ABCA4-Related Disorders","id":"SCV000914269.0","medgen_id":"CN239167","trait_id":"36364","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"Stargardt Disease, Recessive","id":"SCV000359225.0","medgen_id":"CN239312","trait_id":"36509","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"Cone-Rod Dystrophy, Recessive","id":"SCV000359224.0","medgen_id":"CN239309","trait_id":"36506","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"Retinitis Pigmentosa, Recessive","id":"SCV000359223.0","medgen_id":"CN239466","trait_id":"36663","type":"Disease","alternate_names":[],"xrefs":[]}
+{"id":"SCV000504294.0","medgen_id":"C0006118","trait_id":"18256","type":"Disease","alternate_names":[],"xrefs":["{\"db\":\"MeSH\",\"id\":\"D001932\"}"]}
+{"id":"SCV000061597.0","medgen_id":"C0007131","trait_id":"7728","type":"Disease","alternate_names":[],"xrefs":[]}
+{"id":"SCV000504291.0","medgen_id":"C0009404","trait_id":"31583","type":"Disease","alternate_names":[],"xrefs":["{\"db\":\"MeSH\",\"id\":\"D015179\"}"]}
+{"id":"SCV000504300.0","medgen_id":"C0023434","trait_id":"2679","type":"Disease","alternate_names":[],"xrefs":["{\"db\":\"MeSH\",\"id\":\"D015451\"}"]}
+{"id":"SCV000504295.0","medgen_id":"C0025202","trait_id":"18337","type":"Disease","alternate_names":[],"xrefs":["{\"db\":\"MeSH\",\"id\":\"D008545\"}"]}
+{"id":"SCV000504297.0","medgen_id":"C0026764","trait_id":"3136","type":"Disease","alternate_names":[],"xrefs":["{\"db\":\"MeSH\",\"id\":\"D009101\"}"]}
+{"id":"SCV000504292.0","medgen_id":"C0151779","trait_id":"2880","type":"Disease","alternate_names":[],"xrefs":["{\"db\":\"MeSH\",\"id\":\"C562393\"}"]}
+{"id":"SCV000504298.0","medgen_id":"C0152013","trait_id":"6499","type":"Disease","alternate_names":[],"xrefs":["{\"db\":\"MeSH\",\"id\":\"C538231\"}"]}
+{"id":"SCV000504293.0","medgen_id":"C0206686","trait_id":"37005","type":"Disease","alternate_names":[],"xrefs":["{\"db\":\"MeSH\",\"id\":\"D018268\"}"]}
+{"id":"SCV000504296.0","medgen_id":"C0279680","trait_id":"25811","type":"Finding","alternate_names":[],"xrefs":[]}
+{"id":"SCV000504299.0","medgen_id":"C1168401","trait_id":"4210","type":"Disease","alternate_names":[],"xrefs":["{\"db\":\"MeSH\",\"id\":\"C535575\"}"]}
+{"name":"LYMPHOMA, NON-HODGKIN, SOMATIC","id":"SCV000035262.0","medgen_id":"C4721532","trait_id":"2581","type":"Disease","alternate_names":[],"xrefs":[]}
+{"id":"SCV000266006.0","medgen_id":"C1858438","trait_id":"10180","type":"Disease","alternate_names":[],"xrefs":[]}
+{"id":"SCV000883121.0","medgen_id":"C2713442","trait_id":"15929","type":"Disease","alternate_names":[],"xrefs":["{\"db\":\"OMIM\",\"id\":\"175100\",\"type\":\"MIM\"}"]}
+{"id":"SCV000153895.0","medgen_id":"C2713442","trait_id":"15929","type":"Disease","alternate_names":[],"xrefs":[]}
+{"id":"SCV000839876.0","medgen_id":"C2713442","trait_id":"15929","type":"Disease","alternate_names":[],"xrefs":["{\"db\":\"OMIM\",\"id\":\"175100\",\"type\":\"MIM\"}"]}
+{"id":"SCV000677724.0","medgen_id":"C2713442","trait_id":"15929","type":"Disease","alternate_names":[],"xrefs":["{\"db\":\"OMIM\",\"id\":\"175100\",\"type\":\"MIM\"}"]}
+{"id":"SCV000021015.0","medgen_id":"C3469522","trait_id":"9673","type":"Disease","alternate_names":["BREAST CANCER, SUSCEPTIBILITY TO"],"xrefs":[]}
+{"id":"SCV000694042.0","medgen_id":"CN221809","trait_id":"9672","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"Not Provided","id":"SCV000602533.0","medgen_id":"CN517202","trait_id":"17556","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"Not Provided","id":"SCV000148996.0","medgen_id":"CN517202","trait_id":"17556","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"colon cancer","id":"SCV000266006.4.0","type":"Finding","alternate_names":[],"xrefs":[]}
+{"name":"not provided","id":"SCV000610138.0","medgen_id":"CN517202","trait_id":"17556","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"not provided","id":"SCV000043125.0","medgen_id":"CN517202","trait_id":"17556","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"not provided","id":"SCV000805404.0","medgen_id":"CN517202","trait_id":"17556","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"breast cancer","id":"SCV000266006.0.0","type":"Finding","alternate_names":[],"xrefs":[]}
+{"name":"breast cancer","id":"SCV000266006.1.0","type":"Finding","alternate_names":[],"xrefs":[]}
+{"name":"not specified","id":"SCV000591159.0","medgen_id":"CN169374","trait_id":"16789","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"not specified","id":"SCV000600091.0","medgen_id":"CN169374","trait_id":"16789","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"ovarian cancer","id":"SCV000266006.7.0","type":"Finding","alternate_names":[],"xrefs":[]}
+{"name":"AllHighlyPenetrant","id":"SCV000084184.0","medgen_id":"CN169374","trait_id":"16789","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"Carcinoma of colon","id":"SCV000853088.0","medgen_id":"C0699790","trait_id":"10229","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"bilateral breast cancer","id":"SCV000266006.8.0","type":"Finding","alternate_names":[],"xrefs":[]}
+{"name":"Adenomatous polyposis coli","id":"SCV000297021.0","medgen_id":"C0032580","trait_id":"6588","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"Familial adenomatous polyposis","id":"SCV000807826.0","medgen_id":"CN240755","trait_id":"36952","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"Familial adenomatous polyposis 1","id":"SCV000838110.0","medgen_id":"C2713442","trait_id":"15929","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"APC-Associated Polyposis Conditions","id":"SCV000040392.0","medgen_id":"C2713442","trait_id":"15929","type":"Disease","alternate_names":[],"xrefs":["{\"db\":\"GeneReviews\",\"id\":\"NBK1345\"}","{\"db\":\"OMIM\",\"id\":\"175100\",\"type\":\"MIM Number\"}"]}
+{"name":"Hereditary cancer-predisposing syndrome","id":"SCV000183892.0","medgen_id":"C0027672","trait_id":"18746","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"Hereditary cancer-predisposing syndrome","id":"SCV000686956.0","medgen_id":"C0027672","trait_id":"18746","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"Hereditary cancer-predisposing syndrome","id":"SCV000693480.0","medgen_id":"C0027672","trait_id":"18746","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"Hereditary cancer-predisposing syndrome","id":"SCV000821694.0","medgen_id":"C0027672","trait_id":"18746","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"FAMILIAL ADENOMATOUS POLYPOSIS 1, SUSCEPTIBILITY TO","id":"SCV000021014.0","trait_id":"9672","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"MR/ID/DD","id":"SCV000244223.0.0","type":"Finding","alternate_names":[],"xrefs":[]}
+{"name":"Hypotonia","id":"SCV000244223.0.3","type":"Finding","alternate_names":[],"xrefs":[]}
+{"name":"Seizures/Epilepsy","id":"SCV000244223.0.2","type":"Finding","alternate_names":[],"xrefs":[]}
+{"name":"Brain MRI positive","id":"SCV000244223.0.1","type":"Finding","alternate_names":[],"xrefs":[]}
+{"name":"Hereditary disease","id":"SCV000244223.0","medgen_id":"C0950123","trait_id":"32761","type":"Disease","alternate_names":[],"xrefs":["{\"db\":\"MeSH\",\"id\":\"D030342\"}"]}
+{"name":"Neurologic (child onset)","id":"SCV000244223.0.4","type":"Finding","alternate_names":[],"xrefs":[]}
+{"name":"Ophthalmologic (child onset)","id":"SCV000244223.0.5","type":"Finding","alternate_names":[],"xrefs":[]}
+{"id":"SCV000683147.0","medgen_id":"C0027672","trait_id":"18746","type":"Disease","alternate_names":[],"xrefs":[]}
+{"id":"SCV000587372.0","medgen_id":"C0677776","trait_id":"16761","type":"Disease","alternate_names":[],"xrefs":["{\"db\":\"Orphanet\",\"id\":\"ORPHA145\"}"]}
+{"id":"SCV000219238.0","medgen_id":"C0677776","trait_id":"16761","type":"Disease","alternate_names":[],"xrefs":["{\"db\":\"Orphanet\",\"id\":\"ORPHA145\"}"]}
+{"id":"SCV000591484.0","medgen_id":"C0677776","trait_id":"16761","type":"Disease","alternate_names":[],"xrefs":[]}
+{"id":"SCV000699105.0","medgen_id":"C0677776","trait_id":"16761","type":"Disease","alternate_names":[],"xrefs":[]}
+{"id":"SCV000584013.0","medgen_id":"C2676676","trait_id":"4711","type":"Disease","alternate_names":[],"xrefs":["{\"db\":\"OMIM\",\"id\":\"604370\"}"]}
+{"id":"SCV000744620.0","medgen_id":"C2676676","trait_id":"4711","type":"Disease","alternate_names":[],"xrefs":["{\"db\":\"OMIM\",\"id\":\"604370\",\"type\":\"MIM\"}"]}
+{"id":"SCV000577930.0","medgen_id":"C2676676","trait_id":"4711","type":"Disease","alternate_names":[],"xrefs":["{\"db\":\"OMIM\",\"id\":\"604370\",\"type\":\"MIM\"}"]}
+{"id":"SCV000564378.0","medgen_id":"C2676676","trait_id":"4711","type":"Disease","alternate_names":[],"xrefs":[]}
+{"id":"SCV000282322.0","medgen_id":"C2676676","trait_id":"4711","type":"Disease","alternate_names":[],"xrefs":["{\"db\":\"OMIM\",\"id\":\"604370\",\"type\":\"MIM\"}"]}
+{"id":"SCV000733615.0","medgen_id":"C2676676","trait_id":"4711","type":"Disease","alternate_names":[],"xrefs":["{\"db\":\"OMIM\",\"id\":\"604370\",\"type\":\"MIM\"}"]}
+{"id":"SCV000325829.0","medgen_id":"C2676676","trait_id":"4711","type":"Disease","alternate_names":[],"xrefs":["{\"db\":\"OMIM\",\"id\":\"604370\",\"type\":\"MIM\"}"]}
+{"id":"SCV000296801.0","medgen_id":"CN169374","trait_id":"16789","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"Not Provided","id":"SCV000210049.0","medgen_id":"CN517202","trait_id":"17556","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"not provided","id":"SCV000296305.0","medgen_id":"CN517202","trait_id":"17556","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"Familial cancer of breast","id":"SCV000540939.0","medgen_id":"C0006142","trait_id":"536","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"Breast and/or ovarian cancer","id":"SCV000863590.0","medgen_id":"CN221562","trait_id":"32337","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"Breast-ovarian cancer, familial 1","id":"SCV000053742.0","medgen_id":"C2676676","trait_id":"4711","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"Breast-ovarian cancer, familial 1","id":"SCV000144954.0","medgen_id":"C2676676","trait_id":"4711","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"Breast-ovarian cancer, familial 1","id":"SCV000220878.0","medgen_id":"C2676676","trait_id":"4711","type":"Disease","alternate_names":[],"xrefs":["{\"db\":\"OMIM\",\"id\":\"604370\",\"type\":\"MIM\"}"]}
+{"name":"Hereditary cancer-predisposing syndrome","id":"SCV000186942.0","medgen_id":"C0027672","trait_id":"18746","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"Hereditary breast and ovarian cancer syndrome","id":"SCV000839242.0","medgen_id":"C0677776","trait_id":"16761","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"Hereditary breast and ovarian cancer syndrome","id":"SCV000076444.0","medgen_id":"C0677776","trait_id":"16761","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"BREAST-OVARIAN CANCER, FAMILIAL, SUSCEPTIBILITY TO, 1","id":"SCV000039531.0","medgen_id":"C2676676","trait_id":"4711","type":"Disease","alternate_names":[],"xrefs":[]}
+{"id":"SCV000494066.0","medgen_id":"C0004135","trait_id":"4635","type":"Disease","alternate_names":[],"xrefs":["{\"db\":\"OMIM\",\"id\":\"208900\",\"type\":\"MIM\"}"]}
+{"id":"SCV000788260.0","medgen_id":"CN073359","type":"Disease","alternate_names":[],"xrefs":[]}
+{"id":"SCV000645524.0","medgen_id":"C1956125","trait_id":"142","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"Not Provided","id":"SCV000321788.0","medgen_id":"CN517202","trait_id":"17556","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"not provided","id":"SCV000708478.0","medgen_id":"CN517202","trait_id":"17556","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"ALAGILLE SYNDROME 1","id":"SCV000028265.0","medgen_id":"C1956125","trait_id":"142","type":"Disease","alternate_names":[],"xrefs":[]}
+{"id":"SCV000923905.0","medgen_id":"CN236629","trait_id":"35545","type":"Disease","alternate_names":[],"xrefs":["{\"db\":\"MeSH\",\"id\":\"D010051\"}"]}
+{"name":"Hereditary cancer-predisposing syndrome","id":"SCV000665087.0","medgen_id":"C0027672","trait_id":"18746","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"not specified","id":"SCV000711777.0","medgen_id":"CN169374","trait_id":"16789","type":"Disease","alternate_names":[],"xrefs":[]}
+{"id":"SCV000328841.0","medgen_id":"C3806634","trait_id":"910","type":"Disease","alternate_names":[],"xrefs":["{\"db\":\"OMIM\",\"id\":\"300475\",\"type\":\"MIM\"}"]}
+{"id":"SCV000606931.0","medgen_id":"C0007194","trait_id":"22501","type":"Disease","alternate_names":[],"xrefs":[]}
+{"id":"SCV000059054.0","medgen_id":"C0949658","trait_id":"8483","type":"Disease","alternate_names":[],"xrefs":["{\"db\":\"Orphanet\",\"id\":\"ORPHA99739\"}"]}
+{"id":"SCV000803346.0","medgen_id":"C1861862","trait_id":"1312","type":"Disease","alternate_names":[],"xrefs":["{\"db\":\"OMIM\",\"id\":\"115197\",\"type\":\"MIM\"}"]}
+{"id":"SCV000840016.0","medgen_id":"C1861862","trait_id":"1312","type":"Disease","alternate_names":[],"xrefs":["{\"db\":\"OMIM\",\"id\":\"115197\",\"type\":\"MIM\"}"]}
+{"id":"SCV000692517.0","medgen_id":"C3495498","trait_id":"1311","type":"Disease","alternate_names":[],"xrefs":["{\"db\":\"OMIM\",\"id\":\"192600\",\"type\":\"MIM\"}"]}
+{"id":"SCV000696313.0","medgen_id":"CN230736","trait_id":"33389","type":"Finding","alternate_names":[],"xrefs":[]}
+{"name":"Anxiety","id":"SCV000606931.0.5","type":"Finding","alternate_names":[],"xrefs":["{\"db\":\"HP\",\"id\":\"HP:0000739\"}"]}
+{"name":"Not Provided","id":"SCV000604327.0","medgen_id":"CN517202","trait_id":"17556","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"Not Provided","id":"SCV000208031.0","medgen_id":"CN517202","trait_id":"17556","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"Not provided","id":"SCV000280214.0","medgen_id":"CN517202","trait_id":"17556","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"not provided","id":"SCV000614141.0","medgen_id":"CN517202","trait_id":"17556","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"not provided","id":"SCV000862304.0","medgen_id":"CN517202","trait_id":"17556","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"Premature birth","id":"SCV000606931.0.1","type":"Finding","alternate_names":[],"xrefs":["{\"db\":\"HP\",\"id\":\"HP:0001622\"}"]}
+{"name":"Autistic behavior","id":"SCV000606931.0.6","type":"Finding","alternate_names":[],"xrefs":["{\"db\":\"HP\",\"id\":\"HP:0000729\"}"]}
+{"name":"Short attention span","id":"SCV000606931.0.4","type":"Finding","alternate_names":[],"xrefs":["{\"db\":\"HP\",\"id\":\"HP:0000736\"}"]}
+{"name":"MYBPC3-Related Disorders","id":"SCV000372357.0","medgen_id":"CN239295","trait_id":"36492","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"cardiovascular phenotype","id":"SCV000319017.0","medgen_id":"CN230736","trait_id":"33389","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"Abnormality of the placenta","id":"SCV000606931.0.2","type":"Finding","alternate_names":[],"xrefs":["{\"db\":\"HP\",\"id\":\"HP:0100767\"}"]}
+{"name":"Hypertrophic cardiomyopathy","id":"SCV000260968.0","medgen_id":"C0007194","trait_id":"22501","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"Cardiomyopathy, hypertrophic","id":"SCV000190379.0","medgen_id":"C0949658","trait_id":"8483","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"Dilated Cardiomyopathy, Dominant","id":"SCV000372356.0","medgen_id":"CN239310","trait_id":"36507","type":"Disease","alternate_names":[],"xrefs":[]}
+{"name":"Abnormality of the amniotic fluid","id":"SCV000606931.0.3","type":"Finding","alternate_names":[],"xrefs":["{\"db\":\"HP\",\"id\":\"HP:0001560\"}"]}
+{"name":"Abnormality of the umbilical cord","id":"SCV000606931.0.0","type":"Finding","alternate_names":[],"xrefs":["{\"db\":\"HP\",\"id\":\"HP:0010881\"}"]}
+{"name":"Left Ventricular Noncompaction Cardiomyopathy","id":"SCV000372355.0","medgen_id":"C4021133","trait_id":"29561","type":"Finding","alternate_names":[],"xrefs":[]}

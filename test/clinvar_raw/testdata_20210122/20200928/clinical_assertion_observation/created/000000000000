@@ -1,0 +1,1 @@
+{"content":"{\"Method\":{\"MethodType\":{\"$\":\"clinical testing\"}},\"ObservedData\":{\"Attribute\":{\"$\":\"not provided\",\"@Type\":\"Description\"}},\"Sample\":{\"AffectedStatus\":{\"$\":\"yes\"},\"Origin\":{\"$\":\"germline\"},\"Species\":{\"$\":\"human\",\"@TaxonomyId\":\"9606\"}}}","id":"SCV001433438.0"}

@@ -1,0 +1,68 @@
+{"id":"253959","hgnc_id":"HGNC:17770","full_name":"Ral GTPase activating protein catalytic subunit alpha 1","symbol":"RALGAPA1"}
+{"id":"123264","hgnc_id":"HGNC:29956","full_name":"solute carrier family 51 subunit beta","symbol":"SLC51B"}
+{"id":"119710","hgnc_id":"HGNC:25142","full_name":"intraflagellar transport associated protein","symbol":"IFTAP"}
+{"id":"57148","hgnc_id":"HGNC:29221","full_name":"Ral GTPase activating protein non-catalytic subunit beta","symbol":"RALGAPB"}
+{"id":"1439","hgnc_id":"HGNC:2436","full_name":"colony stimulating factor 2 receptor subunit beta","symbol":"CSF2RB"}
+{"id":"29927","hgnc_id":"HGNC:18276","full_name":"SEC61 translocon subunit alpha 1","symbol":"SEC61A1"}
+{"id":"51571","hgnc_id":"HGNC:25216","full_name":"CYFIP related Rac1 interactor B","symbol":"CYRIB"}
+{"id":"6340","hgnc_id":"HGNC:10602","full_name":"sodium channel epithelial 1 subunit gamma","symbol":"SCNN1G"}
+{"id":"541578","hgnc_id":"HGNC:17402","full_name":"endothelium and lymphocyte associated ASCH domain 2","symbol":"EOLA2"}
+{"id":"24142","hgnc_id":"HGNC:30252","full_name":"N-alpha-acetyltransferase 80, NatH catalytic subunit","symbol":"NAA80"}
+{"id":"80155","hgnc_id":"HGNC:30782","full_name":"N-alpha-acetyltransferase 15, NatA auxiliary subunit","symbol":"NAA15"}
+{"id":"2570","hgnc_id":"HGNC:4091","full_name":"gamma-aminobutyric acid type A receptor subunit rho2","symbol":"GABRR2"}
+{"id":"79903","hgnc_id":"HGNC:25875","full_name":"N-alpha-acetyltransferase 60, NatF catalytic subunit","symbol":"NAA60"}
+{"id":"84316","hgnc_id":"HGNC:28212","full_name":"N-alpha-acetyltransferase 38, NatC auxiliary subunit","symbol":"NAA38"}
+{"id":"2560","hgnc_id":"HGNC:4081","full_name":"gamma-aminobutyric acid type A receptor subunit beta1","symbol":"GABRB1"}
+{"id":"2568","hgnc_id":"HGNC:4089","full_name":"gamma-aminobutyric acid type A receptor subunit pi","symbol":"GABRP"}
+{"id":"23480","hgnc_id":"HGNC:18277","full_name":"SEC61 translocon subunit gamma","symbol":"SEC61G"}
+{"id":"1438","hgnc_id":"HGNC:2435","full_name":"colony stimulating factor 2 receptor subunit alpha","symbol":"CSF2RA"}
+{"id":"2569","hgnc_id":"HGNC:4090","full_name":"gamma-aminobutyric acid type A receptor subunit rho1","symbol":"GABRR1"}
+{"id":"60560","hgnc_id":"HGNC:24340","full_name":"N-alpha-acetyltransferase 35, NatC auxiliary subunit","symbol":"NAA35"}
+{"id":"79829","hgnc_id":"HGNC:25845","full_name":"N-alpha-acetyltransferase 40, NatD catalytic subunit","symbol":"NAA40"}
+{"id":"80018","hgnc_id":"HGNC:25783","full_name":"N-alpha-acetyltransferase 25, NatB auxiliary subunit","symbol":"NAA25"}
+{"id":"2555","hgnc_id":"HGNC:4076","full_name":"gamma-aminobutyric acid type A receptor subunit alpha2","symbol":"GABRA2"}
+{"id":"8802","hgnc_id":"HGNC:11449","full_name":"succinate-CoA ligase GDP/ADP-forming subunit alpha","symbol":"SUCLG1"}
+{"id":"55013","hgnc_id":"HGNC:26076","full_name":"mitochondrial calcium uniporter dominant negative subunit beta","symbol":"MCUB"}
+{"id":"2564","hgnc_id":"HGNC:4085","full_name":"gamma-aminobutyric acid type A receptor subunit epsilon","symbol":"GABRE"}
+{"id":"6338","hgnc_id":"HGNC:10600","full_name":"sodium channel epithelial 1 subunit beta","symbol":"SCNN1B"}
+{"id":"79612","hgnc_id":"HGNC:26164","full_name":"N-alpha-acetyltransferase 16, NatA auxiliary subunit","symbol":"NAA16"}
+{"id":"9913","hgnc_id":"HGNC:30632","full_name":"SPT7 like, STAGA complex subunit gamma","symbol":"SUPT7L"}
+{"id":"2563","hgnc_id":"HGNC:4084","full_name":"gamma-aminobutyric acid type A receptor subunit delta","symbol":"GABRD"}
+{"id":"8801","hgnc_id":"HGNC:11450","full_name":"succinate-CoA ligase GDP-forming subunit beta","symbol":"SUCLG2"}
+{"id":"2559","hgnc_id":"HGNC:4080","full_name":"gamma-aminobutyric acid type A receptor subunit alpha6","symbol":"GABRA6"}
+{"id":"10952","hgnc_id":"HGNC:16993","full_name":"SEC61 translocon subunit beta","symbol":"SEC61B"}
+{"id":"91966","hgnc_id":"HGNC:28089","full_name":"endothelium and lymphocyte associated ASCH domain 1","symbol":"EOLA1"}
+{"id":"81553","hgnc_id":"HGNC:25373","full_name":"CYFIP related Rac1 interactor A","symbol":"CYRIA"}
+{"id":"51126","hgnc_id":"HGNC:15908","full_name":"N-alpha-acetyltransferase 20, NatB catalytic subunit","symbol":"NAA20"}
+{"id":"285759","hgnc_id":"HGNC:54660","full_name":"long intergenic non-protein coding RNA 2880","symbol":"LINC02880"}
+{"id":"80218","hgnc_id":"HGNC:29533","full_name":"N-alpha-acetyltransferase 50, NatE catalytic subunit","symbol":"NAA50"}
+{"id":"2556","hgnc_id":"HGNC:4077","full_name":"gamma-aminobutyric acid type A receptor subunit alpha3","symbol":"GABRA3"}
+{"id":"2566","hgnc_id":"HGNC:4087","full_name":"gamma-aminobutyric acid type A receptor subunit gamma2","symbol":"GABRG2"}
+{"id":"2557","hgnc_id":"HGNC:4078","full_name":"gamma-aminobutyric acid type A receptor subunit alpha4","symbol":"GABRA4"}
+{"id":"2565","hgnc_id":"HGNC:4086","full_name":"gamma-aminobutyric acid type A receptor subunit gamma1","symbol":"GABRG1"}
+{"id":"55176","hgnc_id":"HGNC:17702","full_name":"SEC61 translocon subunit alpha 2","symbol":"SEC61A2"}
+{"id":"2561","hgnc_id":"HGNC:4082","full_name":"gamma-aminobutyric acid type A receptor subunit beta2","symbol":"GABRB2"}
+{"id":"5160","hgnc_id":"HGNC:8806","full_name":"pyruvate dehydrogenase E1 subunit alpha 1","symbol":"PDHA1"}
+{"id":"2567","hgnc_id":"HGNC:4088","full_name":"gamma-aminobutyric acid type A receptor subunit gamma3","symbol":"GABRG3"}
+{"id":"200931","hgnc_id":"HGNC:29955","full_name":"solute carrier family 51 subunit alpha","symbol":"SLC51A"}
+{"id":"100130539","hgnc_id":"HGNC:51236","full_name":"long intergenic non-protein coding RNA 2881","symbol":"LINC02881"}
+{"id":"6339","hgnc_id":"HGNC:10601","full_name":"sodium channel epithelial 1 subunit delta","symbol":"SCNN1D"}
+{"id":"55879","hgnc_id":"HGNC:14454","full_name":"gamma-aminobutyric acid type A receptor subunit theta","symbol":"GABRQ"}
+{"id":"122830","hgnc_id":"HGNC:19844","full_name":"N-alpha-acetyltransferase 30, NatC catalytic subunit","symbol":"NAA30"}
+{"id":"84779","hgnc_id":"HGNC:28125","full_name":"N-alpha-acetyltransferase 11, NatA catalytic subunit","symbol":"NAA11"}
+{"id":"100288524","hgnc_id":"HGNC:54640","full_name":"FOXL3 overlapping transcript 1","symbol":"FOXL3-OT1"}
+{"id":"5162","hgnc_id":"HGNC:8808","full_name":"pyruvate dehydrogenase E1 subunit beta","symbol":"PDHB"}
+{"id":"8803","hgnc_id":"HGNC:11448","full_name":"succinate-CoA ligase ADP-forming subunit beta","symbol":"SUCLA2"}
+{"id":"54936","hgnc_id":"HGNC:21304","full_name":"ADP-ribosylserine hydrolase","symbol":"ADPRS"}
+{"id":"2554","hgnc_id":"HGNC:4075","full_name":"gamma-aminobutyric acid type A receptor subunit alpha1","symbol":"GABRA1"}
+{"id":"2558","hgnc_id":"HGNC:4079","full_name":"gamma-aminobutyric acid type A receptor subunit alpha5","symbol":"GABRA5"}
+{"id":"23203","hgnc_id":"HGNC:18667","full_name":"peptidase, mitochondrial processing subunit alpha","symbol":"PMPCA"}
+{"id":"9512","hgnc_id":"HGNC:9119","full_name":"peptidase, mitochondrial processing subunit beta","symbol":"PMPCB"}
+{"id":"57186","hgnc_id":"HGNC:16207","full_name":"Ral GTPase activating protein catalytic subunit alpha 2","symbol":"RALGAPA2"}
+{"id":"2562","hgnc_id":"HGNC:4083","full_name":"gamma-aminobutyric acid type A receptor subunit beta3","symbol":"GABRB3"}
+{"id":"6337","hgnc_id":"HGNC:10599","full_name":"sodium channel epithelial 1 subunit alpha","symbol":"SCNN1A"}
+{"id":"5161","hgnc_id":"HGNC:8807","full_name":"pyruvate dehydrogenase E1 subunit alpha 2","symbol":"PDHA2"}
+{"id":"160760","hgnc_id":"HGNC:30695","full_name":"protein phosphatase targeting COQ7","symbol":"PPTC7"}
+{"id":"200959","hgnc_id":"HGNC:17969","full_name":"gamma-aminobutyric acid type A receptor subunit rho3 (gene/pseudogene)","symbol":"GABRR3"}
+{"id":"7809","hgnc_id":"HGNC:16512","full_name":"barttin CLCNK type accessory subunit beta","symbol":"BSND"}
+{"id":"8260","hgnc_id":"HGNC:18704","full_name":"N-alpha-acetyltransferase 10, NatA catalytic subunit","symbol":"NAA10"}

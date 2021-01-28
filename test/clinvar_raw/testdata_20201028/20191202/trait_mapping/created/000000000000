@@ -1,0 +1,12 @@
+{"trait_type":"Disease","medgen_id":"C1855465","clinical_assertion_id":"SCV000281950","mapping_ref":"OMIM","mapping_value":"248200","medgen_name":"Stargardt disease 1","mapping_type":"XRef"}
+{"trait_type":"Disease","medgen_id":"CN517202","clinical_assertion_id":"SCV000511911","mapping_ref":"Preferred","mapping_value":"Not Provided","medgen_name":"not provided","mapping_type":"Name"}
+{"trait_type":"Disease","medgen_id":"CN517202","clinical_assertion_id":"SCV000117933","mapping_ref":"Preferred","mapping_value":"not provided","medgen_name":"not provided","mapping_type":"Name"}
+{"trait_type":"Disease","medgen_id":"CN169374","clinical_assertion_id":"SCV000110530","mapping_ref":"Preferred","mapping_value":"not specified","medgen_name":"not specified","mapping_type":"Name"}
+{"trait_type":"Disease","medgen_id":"C1855465","clinical_assertion_id":"SCV000028543","mapping_ref":"Preferred","mapping_value":"STARGARDT DISEASE 1","medgen_name":"Stargardt disease 1","mapping_type":"Name"}
+{"trait_type":"Disease","medgen_id":"C0035334","clinical_assertion_id":"SCV000926774","mapping_ref":"Preferred","mapping_value":"Retinitis pigmentosa","medgen_name":"Retinitis pigmentosa","mapping_type":"Name"}
+{"trait_type":"Disease","medgen_id":"CN239167","clinical_assertion_id":"SCV000914269","mapping_ref":"Preferred","mapping_value":"ABCA4-Related Disorders","medgen_name":"ABCA4-Related Disorders","mapping_type":"Name"}
+{"trait_type":"Disease","medgen_id":"CN239312","clinical_assertion_id":"SCV000359225","mapping_ref":"Preferred","mapping_value":"Stargardt Disease, Recessive","medgen_name":"Stargardt Disease, Recessive","mapping_type":"Name"}
+{"trait_type":"Disease","medgen_id":"CN239309","clinical_assertion_id":"SCV000359224","mapping_ref":"Preferred","mapping_value":"Cone-Rod Dystrophy, Recessive","medgen_name":"Cone-Rod Dystrophy, Recessive","mapping_type":"Name"}
+{"trait_type":"Disease","medgen_id":"CN239466","clinical_assertion_id":"SCV000359223","mapping_ref":"Preferred","mapping_value":"Retinitis Pigmentosa, Recessive","medgen_name":"Retinitis Pigmentosa, Recessive","mapping_type":"Name"}
+{"trait_type":"Finding","medgen_id":"C0730290","clinical_assertion_id":"SCV000599010","mapping_ref":"HP","mapping_value":"HP:0000548","medgen_name":"Cone/cone-rod dystrophy","mapping_type":"XRef"}
+{"trait_type":"Finding","medgen_id":"C0024437","clinical_assertion_id":"SCV000359226","mapping_ref":"Preferred","mapping_value":"Macular Degeneration","medgen_name":"Macular degeneration","mapping_type":"Name"}

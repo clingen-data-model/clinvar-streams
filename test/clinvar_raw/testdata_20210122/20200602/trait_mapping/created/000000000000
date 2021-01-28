@@ -1,0 +1,3 @@
+{"trait_type":"Disease","medgen_name":"Usher syndrome type 1","clinical_assertion_id":"SCV000363107","mapping_value":"Usher syndrome type 1","medgen_id":"C1568247","mapping_ref":"Preferred","mapping_type":"Name"}
+{"trait_type":"Disease","medgen_name":"Deafness, autosomal recessive 9","clinical_assertion_id":"SCV000429634","mapping_value":"601071","medgen_id":"C1832828","mapping_ref":"OMIM","mapping_type":"XRef"}
+{"trait_type":"Disease","medgen_name":"Cardiomyopathy","clinical_assertion_id":"SCV001333820","mapping_value":"Cardiomyopathy","medgen_id":"C0878544","mapping_ref":"Preferred","mapping_type":"Name"}

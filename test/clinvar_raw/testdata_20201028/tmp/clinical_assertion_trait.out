@@ -1,0 +1,17 @@
+20190701/clinical_assertion_trait//created/000000000000:95440:{"id":"SCV000599010.0","medgen_id":"C0730290","trait_id":"21734","type":"Finding","alternate_names":[],"xrefs":["{\"db\":\"HP\",\"id\":\"HP:0000548\"}"]}
+20190701/clinical_assertion_trait//created/000000000000:140630:{"id":"SCV000281950.0","medgen_id":"C1855465","trait_id":"3842","type":"Disease","alternate_names":[],"xrefs":["{\"db\":\"OMIM\",\"id\":\"248200\",\"type\":\"MIM\"}"]}
+20190701/clinical_assertion_trait//created/000000000000:332306:{"name":"Not Provided","id":"SCV000511911.0","medgen_id":"CN517202","trait_id":"17556","type":"Disease","alternate_names":[],"xrefs":[]}
+20190701/clinical_assertion_trait//created/000000000000:383331:{"name":"not provided","id":"SCV000117933.0","medgen_id":"CN517202","trait_id":"17556","type":"Disease","alternate_names":[],"xrefs":[]}
+20190701/clinical_assertion_trait//created/000000000000:541604:{"name":"not specified","id":"SCV000110530.0","medgen_id":"CN169374","trait_id":"16789","type":"Disease","alternate_names":[],"xrefs":[]}
+20190701/clinical_assertion_trait//created/000000000000:647053:{"name":"STARGARDT DISEASE 1","id":"SCV000028543.0","medgen_id":"C1855465","trait_id":"3842","type":"Disease","alternate_names":[],"xrefs":[]}
+20190701/clinical_assertion_trait//created/000000000000:657483:{"name":"Macular Degeneration","id":"SCV000359226.0","medgen_id":"C0024437","trait_id":"21784","type":"Finding","alternate_names":[],"xrefs":[]}
+20190701/clinical_assertion_trait//created/000000000000:681730:{"name":"ABCA4-Related Disorders","id":"SCV000914269.0","medgen_id":"CN239167","trait_id":"36364","type":"Disease","alternate_names":[],"xrefs":[]}
+20190701/clinical_assertion_trait//created/000000000000:768050:{"name":"Stargardt Disease, Recessive","id":"SCV000359225.0","medgen_id":"CN239312","trait_id":"36509","type":"Disease","alternate_names":[],"xrefs":[]}
+20190701/clinical_assertion_trait//created/000000000000:770743:{"name":"Cone-Rod Dystrophy, Recessive","id":"SCV000359224.0","medgen_id":"CN239309","trait_id":"36506","type":"Disease","alternate_names":[],"xrefs":[]}
+20190701/clinical_assertion_trait//created/000000000000:798947:{"name":"Retinitis Pigmentosa, Recessive","id":"SCV000359223.0","medgen_id":"CN239466","trait_id":"36663","type":"Disease","alternate_names":[],"xrefs":[]}
+20190731/clinical_assertion_trait//created/000000000000:1221:{"id":"SCV000926774.0","trait_id":"9558","type":"Disease","name":"Retinitis pigmentosa","xrefs":[],"medgen_id":"C0035334","alternate_names":[]}
+20191231/clinical_assertion_trait//created/000000000000:68028:{"trait_id":"17556","alternate_names":[],"medgen_id":"CN517202","name":"not provided","id":"SCV001037250.0","type":"Disease","xrefs":[]}
+20200203/clinical_assertion_trait//created/000000000000:958:{"trait_id":"17556","medgen_id":"CN517202","alternate_names":[],"xrefs":[],"id":"SCV001147323.0","type":"Disease","name":"not provided"}
+20200203/clinical_assertion_trait//created/000000000000:18982:{"trait_id":"3842","medgen_id":"C1855465","alternate_names":[],"xrefs":["{\"db\":\"OMIM\",\"id\":\"248200\",\"type\":\"MIM\"}"],"id":"SCV001135324.0","type":"Disease"}
+20200302/clinical_assertion_trait//created/000000000000:6932:{"medgen_id":"CN169374","name":"not specified","xrefs":[],"type":"Disease","alternate_names":[],"trait_id":"16789","id":"SCV001159506.0"}
+20200506/clinical_assertion_trait//created/000000000000:22519:{"name":"Retinal dystrophy","trait_id":"18440","id":"SCV001241289.0","medgen_id":"C0854723","type":"Disease","xrefs":[],"alternate_names":[]}

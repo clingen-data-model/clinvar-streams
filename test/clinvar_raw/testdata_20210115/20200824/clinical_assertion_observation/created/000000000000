@@ -1,0 +1,1 @@
+{"id":"SCV001430691.0","content":"{\"Method\":{\"MethodType\":{\"$\":\"research\"}},\"ObservedData\":{\"Attribute\":{\"@Type\":\"VariantAlleles\",\"@integerValue\":\"1\"}},\"Sample\":{\"AffectedStatus\":{\"$\":\"unknown\"},\"Origin\":{\"$\":\"germline\"},\"Species\":{\"$\":\"human\",\"@TaxonomyId\":\"9606\"}}}"}

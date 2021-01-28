@@ -1,0 +1,10 @@
+{"id":"SCV001366606.4","type":"Finding","alternate_names":[],"medgen_id":"C0856975","trait_id":"17060","xrefs":["{\"db\":\"HP\",\"id\":\"HP:0000729\"}"]}
+{"id":"SCV001366606.2","type":"Finding","alternate_names":[],"medgen_id":"C0025990","trait_id":"17072","xrefs":["{\"db\":\"HP\",\"id\":\"HP:0000347\"}"]}
+{"id":"SCV001366606.6","type":"Finding","alternate_names":[],"medgen_id":"C4021768","trait_id":"17145","xrefs":["{\"db\":\"HP\",\"id\":\"HP:0001939\"}"]}
+{"id":"SCV001366606.5","type":"Finding","alternate_names":[],"medgen_id":"C0454644","trait_id":"18105","xrefs":["{\"db\":\"HP\",\"id\":\"HP:0000750\"}"]}
+{"id":"SCV001366606.1","type":"Finding","alternate_names":[],"medgen_id":"C1865017","trait_id":"21514","xrefs":["{\"db\":\"HP\",\"id\":\"HP:0000219\"}"]}
+{"id":"SCV001366606.3","type":"Finding","alternate_names":[],"medgen_id":"C3887611","trait_id":"21868","xrefs":["{\"db\":\"HP\",\"id\":\"HP:0000711\"}"]}
+{"id":"SCV001366606.7","type":"Finding","alternate_names":[],"medgen_id":"C3714745","trait_id":"22787","xrefs":["{\"db\":\"HP\",\"id\":\"HP:0002024\"}"]}
+{"id":"SCV001366606.8","type":"Finding","alternate_names":[],"medgen_id":"C4021734","trait_id":"23683","xrefs":["{\"db\":\"HP\",\"id\":\"HP:0003287\"}"]}
+{"id":"SCV001366606.9","type":"Finding","alternate_names":[],"medgen_id":"C1850533","trait_id":"26244","xrefs":["{\"db\":\"HP\",\"id\":\"HP:0007525\"}"]}
+{"id":"SCV001366606.10","type":"Finding","alternate_names":[],"medgen_id":"C3553450","trait_id":"30616","xrefs":["{\"db\":\"HP\",\"id\":\"HP:0012736\"}"]}

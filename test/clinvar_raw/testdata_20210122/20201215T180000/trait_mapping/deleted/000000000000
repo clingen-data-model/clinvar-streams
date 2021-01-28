@@ -1,0 +1,11 @@
+{"medgen_id":"C0026034","clinical_assertion_id":"SCV001366606","medgen_name":"Narrow mouth","mapping_ref":"HP","mapping_value":"HP:0000160","trait_type":"Finding","mapping_type":"XRef"}
+{"medgen_id":"C1865017","clinical_assertion_id":"SCV001366606","medgen_name":"Thin upper lip vermilion","mapping_ref":"HP","mapping_value":"HP:0000219","trait_type":"Finding","mapping_type":"XRef"}
+{"medgen_id":"C0025990","clinical_assertion_id":"SCV001366606","medgen_name":"Micrognathia","mapping_ref":"HP","mapping_value":"HP:0000347","trait_type":"Finding","mapping_type":"XRef"}
+{"medgen_id":"C3887611","clinical_assertion_id":"SCV001366606","medgen_name":"Restlessness","mapping_ref":"HP","mapping_value":"HP:0000711","trait_type":"Finding","mapping_type":"XRef"}
+{"medgen_id":"C0856975","clinical_assertion_id":"SCV001366606","medgen_name":"Autistic behavior","mapping_ref":"HP","mapping_value":"HP:0000729","trait_type":"Finding","mapping_type":"XRef"}
+{"medgen_id":"C0454644","clinical_assertion_id":"SCV001366606","medgen_name":"Delayed speech and language development","mapping_ref":"HP","mapping_value":"HP:0000750","trait_type":"Finding","mapping_type":"XRef"}
+{"medgen_id":"C4021768","clinical_assertion_id":"SCV001366606","medgen_name":"Abnormality of metabolism/homeostasis","mapping_ref":"HP","mapping_value":"HP:0001939","trait_type":"Finding","mapping_type":"XRef"}
+{"medgen_id":"C3714745","clinical_assertion_id":"SCV001366606","medgen_name":"Malabsorption","mapping_ref":"HP","mapping_value":"HP:0002024","trait_type":"Finding","mapping_type":"XRef"}
+{"medgen_id":"C4021734","clinical_assertion_id":"SCV001366606","medgen_name":"Abnormality of mitochondrial metabolism","mapping_ref":"HP","mapping_value":"HP:0003287","trait_type":"Finding","mapping_type":"XRef"}
+{"medgen_id":"C1850533","clinical_assertion_id":"SCV001366606","medgen_name":"Yellow subcutaneous tissue covered by thin, scaly skin","mapping_ref":"HP","mapping_value":"HP:0007525","trait_type":"Finding","mapping_type":"XRef"}
+{"medgen_id":"C3553450","clinical_assertion_id":"SCV001366606","medgen_name":"Profound global developmental delay","mapping_ref":"HP","mapping_value":"HP:0012736","trait_type":"Finding","mapping_type":"XRef"}
