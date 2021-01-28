@@ -14,7 +14,7 @@
                      spy get-env]]
             [clojure.core.async :as async :refer [>!! <!!]]
             [clinvar-raw.config :as cfg]
-            [clinvar-raw.util :as util]
+            [clinvar-streams.util :as util]
             )
   (:import [com.google.cloud.storage Storage StorageOptions BlobId Blob]
            com.google.cloud.storage.Blob$BlobSourceOption
@@ -80,9 +80,13 @@
 
 (defn line-map-to-event [line-map entity-type release_date event-type]
   "Parses a single line of a drop file, transforms into an event object map"
-  (let [content (assoc line-map :entity_type entity-type)
+  (let [content (-> line-map
+                    (assoc :entity_type entity-type)
+                    (assoc :clingen_version 0))
         key (str entity-type "_" (:id content) "_" release_date)
-        event {:release_date release_date :type event-type :content content}]
+        event {:release_date release_date
+               :event_type event-type
+               :content content}]
     {:key key :value event}))
 
 (defn process-drop-record
@@ -96,16 +100,24 @@
 (defn create-sentinel-message
   "sentinel-type should be one of :start, :end"
   [release-tag sentinel-type]
-  (assert (util/in? sentinel-type [:start :end]))
+  ;(try (assert (util/in? sentinel-type [:start :end]))
+  ;     (catch AssertionError e
+  ;       (error e)))
+
   {:key   (str "release_sentinel_" release-tag)
-   :value {:type          "release_sentinel"
-           :sentinel_type (name sentinel-type)
-           :release_date  release-tag
-           :rules         []
-           :source        "clinvar"
-           :reason        (str "ClinVar Upstream Release " release-tag),
-           :notes         nil                               ; TODO
-           ; notes could point to ClinVar release notes, or a clingen release notes page
+   :value {:event_type   "create"
+           :release_date release-tag
+           :content      {:entity_type     "release_sentinel"
+                          :clingen_version 0
+                          :sentinel_type   (name sentinel-type)
+                          ; For releases from upstream, the release tag is clinvar-<releasedate>
+                          :release_tag     (str "clinvar-" release-tag)
+                          :rules           []
+                          :source          "clinvar"
+                          :reason          (str "ClinVar Upstream Release " release-tag),
+                          :notes           nil              ; TODO
+                          ; notes could point to ClinVar release notes (ftp release notes move), or a clingen release notes page
+                          }
            }})
 
 (defn process-clinvar-drop-file
@@ -180,7 +192,7 @@
       (while (not @closed)
         (let [msg (<!! producer-channel)]
           (if (not= msg nil)
-            (send-update-to-exchange producer (:kafka-producer-topic opts) msg)
+            (send-update-to-exchange producer (:kafka-producer-topic opts) (assoc msg :clingen_version 0))
             (do (info "Shutting down send-producer-messages")
                 (reset! closed true))))))))
 

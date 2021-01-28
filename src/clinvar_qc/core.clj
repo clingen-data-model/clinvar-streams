@@ -7,8 +7,8 @@
             [clinvar-qc.config :as cfg]
     ;[clinvar-qc.database-psql.client :as db-client]
     ;[clinvar-qc.database-psql.sink :as db-sink]
-            [clinvar-streams.storage.database_sqlite.client :as db-client]
-            [clinvar-streams.storage.database_sqlite.sink :as db-sink]
+            [clinvar-streams.storage.database-sqlite.client :as db-client]
+            [clinvar-streams.storage.database-sqlite.sink :as db-sink]
             [clinvar-qc.spec :as spec]
             [clojure.java.io :as io]
             [clojure.string :as s]
@@ -150,6 +150,8 @@
       (jc/subscribe consumer [{:topic-name (-> cfg/topic-metadata :input :topic-name)}])
       (while @running
         (let [msgs (jc/poll consumer (Duration/ofMillis 1000))]
+          (if (= 0 (count msgs))
+            (.flush @download-writer))
           (doseq [msg msgs]
             (let [k (:key msg) v (:value msg)]
               (count-msg [k v])
@@ -174,7 +176,7 @@
 
 (defn -download-input-topic-async
   []
-  (.start (Thread. (partial download-input-topic-async-reader read-chan)))
+  (.start (Thread. ^Runnable (partial download-input-topic-async-reader read-chan)))
   (let [output-filename (str (-> cfg/topic-metadata :input :topic-name) ".topic")]
     (reset! download-writer (io/writer output-filename))
     (with-open [consumer (jc/consumer (cfg/kafka-config cfg/app-config))

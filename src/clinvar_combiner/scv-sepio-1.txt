@@ -1,0 +1,347 @@
+SCV3
+
+VA/SEPIO Mock up for ClinVar SCV
+
+Namespaces
+    clinvar.submission         - SCV accessions
+    clinvar                    - clinvar variation ids.
+    clinvar.record             - RCV accessions
+    clinvar.<archive>          - VCV accessions
+
+Tasks/Todos.
+    - find examples of SCVs that don't map well to VRS Allele/Haplotype... Can we normalize all these to a "text" form ?
+    - reach out to ClinVar for VCV prefix in identifiers.org... (done - waiting on reply)
+    - review/compare the externalMetaData object with the vrsDescriptor to see if these are translatable...
+    - (MBrush) discuss resolution on the terms "object" vs. "descriptor" for the statement and how it clashes with VRS-Descriptor semantics.
+    - Terry or Tristan to verify that we use direct references on conditions in lieu of GeneticConditions when possible.
+    - bring a new SCV example to the call with multiple case level data observations....
+    - MB idea - use caseStudy VA object to group clinvar case level info. this should provide solution for multi-record case info per SCV.
+
+{
+    "clinical_assertion" : {
+        "id" : "clinvar.submission:SCV000616365.3",
+        "type" : "VariantPathogenicityStatement",
+        "subject" : "vrs-descriptor:100",
+        "object" : "condition:100",
+        "predicate" : "LOINC:Pathogenic",       // value set.... LOINC, GENO may be better in the long run (control-wise)
+        "description" :
+            "The c.173C>T (p.Thr58Ile) variant in HRAS has been reported in the literature as an unconfirmed de novo occurrence in a patient with clinical features of a RASopathy (PM6; PMID 20112233, 16474405). Also, at least 2 independent occurrences of this variant have been detected in patients with a RASopathy (PS4_Supporting; PMID: 22488832, 18247425, 23321623, 20949621, 16921267). This variant was absent from large population studies (PM2; ExAC, http://exac.broadinstitute.org). The p.Thr58Ile variant in HRAS is analogous to the same previously established amino acid change in the KRAS gene and the ClinGen RASopathy Expert Panel has defined that the pathogenicities of analogous variants in the HRAS and KRAS genes are correlated based on the assumption that a known functional residue in one gene is equivalent to other functions within that subgroup (PS1; 29493581). Furthermore, the variant is in a location that has been defined by the ClinGen RASopathy Expert Panel to be a mutational hotspot or domain of HRAS (PM1; PMID 29493581). The variant is in HRAS, which has been defined by the ClinGen RASopathy Expert Panel as a gene with low rate of benign missense with missense variants commonly being pathogenic (PP2; PMID 29493581). Computational prediction tools and conservation analysis suggest that the p.Thr58Ile variant may impact the protein (PP3). In summary, this variant meets criteria to be classified as pathogenic for RASopathies in an autosomal dominant manner. Rasopathy-specific ACMG/AMP criteria applied (PMID:29493581): PM6, PS4_Supporting, PM2, PS1, PM1, PP2, PP3.",
+        "variantOriginQualifier" : "GENO:germline",
+        // contains both the date/activity for submission and approval/authorship
+        "qualifiedContribution" : ["contribution:100","contribution:101"]
+        // this is the assertion method.
+        "wasSpecifiedBy": "method:100",
+        // how to select ICE structures? is it good enough to simply use an array of CURIEs?
+        // I'm showing what it might look like if we minimally have an externalId and a "type" value, since ICE objects have so many types, it may be required?
+        "hasEvidenceFromSource" :
+        [
+        // these are document references, except the last one.
+        {
+            "id": "PubMed:20949621",
+            "documentType" : "Publication",     // optional
+            "type": "Document"
+        },{
+            "id" : "PubMed:16474405",
+            "type" : "Document"
+        },{
+            "id" :"PubMed:20112233",
+            "type" : "Document"
+        },{
+            "id" : "PubMed:16921267",
+            "type" : "Document"
+        },{
+            "id" : "PubMed:22488832",
+            "type" : "Document"
+        },{
+            "id" : "PubMed:23321623",
+            "type" : "Document"
+        },{
+            "id" : "PubMed:18247425",
+            "type" : "Document"
+        },{
+            // this is a software system record ?DataRecord?
+            "id" : "https://erepo.clinicalgenome.org/evrepo/ui/interpretation/4fa14d9d-3bce-4dd8-affa-771b6298c4fc",
+            "documentType" : "WebPage",
+            "type" : "Document"
+        }],
+
+        // some type of extensible map to add attributes on the end of an entity of interest seems essential to get started with this.
+        "extensions" : {
+            "variationInheritancePattern" : "GENO:Autosomal dominant inheritance",               // verify with SHarrison whether this can be moved to GCondition.
+            "reviewerStatus" : "reviewed by expert panel",
+            "recordStatus" : "current",
+            "affectedStatus" : "unknown",
+            "methodType" : "curation",
+            "localKey" : "4fa14d9d-3bce-4dd8-affa-771b6298c4fc|Orphanet:ORPHA3071",
+            "clinicalAssertionInternalId": "1202773",
+            "FDARecognizedDatabase" : "true",
+            "DateCreated" : "2017-12-15",
+            "DateLastUpdated" : "2019-07-17",
+            "variationId" : "12610",
+            "variationArchiveId" : "VCV000012610",
+            "rcvAccessionId" : "RCV000013444"
+        }
+    },
+
+    // condition domain entity - dealers choice?
+    "conditions" : [
+    {
+        "id": "condition:100",
+        "type" : "GeneticCondition",
+        "disease" : ["Orphanet:ORPHA3071"]
+        "inheritancePattern": "GENO:Autosomal dominant inheritance"
+    }
+    ],
+
+    // should these submitter entities be Contribution entities? can we add the abbrev. and category columns?
+    "contributions":[
+    // this contribution is about the activity and agent for the submission and authorship, which are co-occurrent.
+    {
+        "id": "contribution:100",
+        "type": "Contribution",
+        //...?? do we need contributionMadeTo ?? ..
+        "contributionMadeTo" : "ClinVar:SCV000616365.3",
+        "contributionMadeBy" : "ClinVarOrgId:506439",
+        // this is really an activity type moreso than a contributor role. not many care about the role of
+        // the contributor, most will care about the activity that the agent contributed to - in whatever
+        // capacity. The activity can specialize the contribution such that the role is inconsequential.
+        "contribtorRole" : ["submission"]
+        "startDate" : "2019-02-25",
+        "endDate" : "2019-02-25",
+        "extensions" : {
+            "submissionName" : "SUB5222244"
+        }
+    },
+    // this contribution is about the activity agent related to the "last evaluation", "approval" or "authoredOn" date.
+    {
+        "id": "contribution:101",
+        "type": "Contribution",
+        "contributionMadeTo" : "ClinVar:SCV000616365.3",
+        "contributionMadeBy" : "ClinVarOrgId:506439",
+        "contribtorRole" : ["approval"]
+        "startDate" : "2017-04-03",
+        "endDate" : "2017-04-03"
+
+    }],
+
+    "agents" : [
+    {
+        "id" : "ClinVarOrgId:506439",
+        "type" : "Agent",
+        "label":"ClinGen RASopathy Variant Curation Expert Panel",
+        "qualifiedContibution" : "... ?? do we need this ?? .. ",
+
+        // the 2 below are not part of SEPIO Agent class. Where do they go?
+        "extensions" : {
+            "orgAbbreviation": "RAS-EP",
+            "orgCategory":"consortium"
+        }
+    }],
+
+    methods : [
+    {
+        "id" : "method:100",
+        "type" : "AssertionMethod",
+        "label" : "ClinGen RASopathy ACMG Specifications v1",
+        "methodType" : "SEPIO-CG:ACMGVariantPathogenicity" ,      // ?? what goes here? is this a custom sepio value set - Yes!
+        "hasUrl" : ["https://submit.ncbi.nlm.nih.gov/ft/byid/60rptlbs/clingen_rasopathy_acmg_specifications_v1.pdf"]
+    }],
+
+    "vrs-objects":[
+    {
+        "_id" : "ga4gh:VA.C0OEtMYqCBfqfxG1XUH73Vn9ax-9x6gO",
+        "type" : "Allele",
+        "state": {
+            "sequence": "A",
+            "type": "SequenceState"
+        },
+        "location" : {
+            "_id": "ga4gh:VSL.CBfqfC0O-9x6EtMYq1XUH73Vn9axgOxG",
+            "type": "SequenceLocation",
+            "interval": {
+                "end": 533883,
+                "start": 533882,
+                "type": "SimpleInterval"
+            },
+            "sequence_id": "ga4gh:SQ.rvra4fpLT_m155UmcSC-zA5ZK0wi-qoD"
+        }
+    }],
+
+    // should vrs-descriptors be embedded within the clinvarSCV element or outside?
+    "vrs-descriptors":[
+        {
+            "id": "vrs-descriptor:100",
+            "type": "AlleleDescriptor",
+            "vrs_id" : "ga4gh:VA.C0OEtMYqCBfqfxG1XUH73Vn9ax-9x6gO",
+            "label": "NC_000011.10:g.533883G>A",
+            "description" : "",
+            "xrefs" : [""],
+            "contributions" : ["contribution:200"],              // what system/user defined this descriptor, this is how and (keep it simple - for now)
+                // application + ver + "generator" + date       // what generated this "extension" helps to know where the extensions came from.
+
+            "sequenceDescriptor" : "vrs-descriptor:101",
+
+            "extensions" : {
+                "submittedHgvs": "NC_000011.10:g.533883G>A",
+                "submittedOtherNames": ["NM_176795.4(HRAS):c.173C>T", "p.Thr58Ile"]
+                "submittedGeneSymbol" : [{
+                    "label" : "HRAS"}]
+                "clinvarVariantType" : "variation"
+            }
+        },
+        {
+            "id" : "vrs-descriptor:101",
+            "type": "SequenceDescriptor",
+            "vrs_id": "ga4gh:SQ.rvra4fpLT_m155UmcSC-zA5ZK0wi-qoD",
+            "label" : "NC_000011.10",
+            "xrefs" : ["RefSeq:"NC_000011.10"],
+            "residue_subtype": "DNA",
+            "extensions" : {
+                "species" : { "id" : "taxonomy:9606", "display": "human"}
+            }
+        }
+    ]
+}
+
+-- below is the original SCV from clinvar xml for the above.
+-- it is wrapped inside a VCV for https://www.ncbi.nlm.nih.gov/clinvar/variation/12610/ (variationId=12610, variationArchiveId=VCV000012610)
+-- and it is related to RCV https://www.ncbi.nlm.nih.gov/clinvar/RCV000013444.20/ (rcvAccessionId=RCV000013444)
+
+
+
+<ClinicalAssertion
+        <!-- namespace so that we can use this as a persistent id without loosing the original value -->
+        ID="1202773"
+
+        <!-- this is a record meta data piece of info -->
+        FDARecognizedDatabase="true"
+        DateCreated="2017-12-15"
+        DateLastUpdated="2019-07-17"
+        SubmissionDate="2019-02-25">
+
+    <ClinVarSubmissionID
+            localKey="4fa14d9d-3bce-4dd8-affa-771b6298c4fc|Orphanet:ORPHA3071"
+
+            <!-- this should be captured as a attribute within the submitted variant -->
+            submittedAssembly="GRCh38"/>
+
+    <ClinVarAccession
+            <!-- SCV id and version -->
+            Accession="SCV000616365"
+            Type="SCV"     <!-- drop this -->
+            Version="3"
+
+            <!-- submitter fields -->
+            SubmitterName="ClinGen RASopathy Variant Curation Expert Panel"
+            OrgID="506439"
+            OrganizationCategory="consortium"
+            OrgAbbreviation="RAS-EP"/>
+
+    <!-- meta data info ? -->
+    <RecordStatus>current</RecordStatus>
+
+    <!-- not the author's confidence, but clinvar's confidence about the author ... should this be meta data-->
+    <ReviewStatus>reviewed by expert panel</ReviewStatus>
+
+    <!-- verify that this is the authored date -->
+    <Interpretation DateLastEvaluated="2017-04-03">
+
+      <!-- predicate -->
+      <Description>Pathogenic</Description>
+
+      <!-- these are citations that support the pathogenicity call - use hasEvidenceFromSource ? -->
+      <Citation>
+        <ID Source="PubMed">20949621</ID>
+      </Citation>
+      <Citation>
+        <ID Source="PubMed">16474405</ID>
+      </Citation>
+      <Citation>
+        <ID Source="PubMed">20112233</ID>
+      </Citation>
+      <Citation>
+        <ID Source="PubMed">16921267</ID>
+      </Citation>
+      <Citation>
+        <ID Source="PubMed">22488832</ID>
+      </Citation>
+      <Citation>
+        <ID Source="PubMed">23321623</ID>
+      </Citation>
+      <Citation>
+        <ID Source="PubMed">18247425</ID>
+      </Citation>
+      <Citation>
+        <URL>https://erepo.clinicalgenome.org/evrepo/ui/interpretation/4fa14d9d-3bce-4dd8-affa-771b6298c4fc</URL>
+      </Citation>
+
+      <Comment Type="public">The c.173C&gt;T (p.Thr58Ile) variant in HRAS has been reported in the literature as an unconfirmed de novo occurrence in a patient with clinical features of a RASopathy (PM6; PMID 20112233, 16474405). Also, at least 2 independent occurrences of this variant have been detected in patients with a RASopathy (PS4_Supporting; PMID: 22488832, 18247425, 23321623, 20949621, 16921267). This variant was absent from large population studies (PM2; ExAC, http://exac.broadinstitute.org). The p.Thr58Ile variant in HRAS is analogous to the same previously established amino acid change in the KRAS gene and the ClinGen RASopathy Expert Panel has defined that the pathogenicities of analogous variants in the HRAS and KRAS genes are correlated based on the assumption that a known functional residue in one gene is equivalent to other functions within that subgroup (PS1; 29493581). Furthermore, the variant is in a location that has been defined by the ClinGen RASopathy Expert Panel to be a mutational hotspot or domain of HRAS (PM1; PMID 29493581). The variant is in HRAS, which has been defined by the ClinGen RASopathy Expert Panel as a gene with low rate of benign missense with missense variants commonly being pathogenic (PP2; PMID 29493581). Computational prediction tools and conservation analysis suggest that the p.Thr58Ile variant may impact the protein (PP3). In summary, this variant meets criteria to be classified as pathogenic for RASopathies in an autosomal dominant manner. Rasopathy-specific ACMG/AMP criteria applied (PMID:29493581): PM6, PS4_Supporting, PM2, PS1, PM1, PP2, PP3.</Comment>
+
+    </Interpretation>
+
+    <Assertion>variation to disease</Assertion>
+
+    <AttributeSet>
+      <Attribute Type="ModeOfInheritance">Autosomal dominant inheritance</Attribute>
+    </AttributeSet>
+
+    <AttributeSet>
+      <Attribute Type="AssertionMethod">ClinGen RASopathy ACMG Specifications v1</Attribute>
+
+      <Citation>
+        <URL>https://submit.ncbi.nlm.nih.gov/ft/byid/60rptlbs/clingen_rasopathy_acmg_specifications_v1.pdf</URL>
+      </Citation>
+    </AttributeSet>
+
+    <ObservedInList>
+      <ObservedIn>
+
+        <Sample>
+          <Origin>germline</Origin>
+          <Species TaxonomyId="9606">human</Species>
+          <AffectedStatus>unknown</AffectedStatus>
+        </Sample>
+
+        <Method>
+          <MethodType>curation</MethodType>
+        </Method>
+
+        <ObservedData>
+          <Attribute Type="Description">not provided</Attribute>
+        </ObservedData>
+
+      </ObservedIn>
+    </ObservedInList>
+
+    <SimpleAllele>
+
+      <GeneList>
+        <Gene Symbol="HRAS"/>
+      </GeneList>
+
+      <VariantType>Variation</VariantType>
+
+      <OtherNameList>
+        <Name>NM_176795.4(HRAS):c.173C&gt;T</Name>
+        <Name>p.Thr58Ile</Name>
+      </OtherNameList>
+
+      <AttributeSet>
+        <Attribute Type="HGVS">NC_000011.10:g.533883G&gt;A</Attribute>
+      </AttributeSet>
+
+    </SimpleAllele>
+
+    <TraitSet Type="Disease">
+
+      <Trait Type="Disease">
+        <XRef DB="Orphanet" ID="ORPHA3071"/>
+      </Trait>
+
+    </TraitSet>
+
+    <SubmissionNameList>
+      <SubmissionName>SUB5222244</SubmissionName>
+    </SubmissionNameList>
+
+</ClinicalAssertion>

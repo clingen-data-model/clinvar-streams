@@ -1,6 +1,6 @@
 (ns clinvar-streams.storage.database-psql.sink
-  (:require [clinvar-qc.database-psql.client :as db-client]
-            [clinvar-qc.util :refer :all]
+  (:require [clinvar-streams.storage.database-psql.client :as db-client]
+            [clinvar-streams.util :refer :all]
             [cheshire.core :as json]
             [clojure.java.jdbc :refer :all :exclude [get-connection]]
             [clojure.core.async :as async]

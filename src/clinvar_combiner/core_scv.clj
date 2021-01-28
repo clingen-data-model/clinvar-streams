@@ -1,4 +1,4 @@
-(ns clinvar_submissions.core_scv
+(ns clinvar_combiner.core_scv
   (:require [clinvar-submissions.db :as db]
             [clinvar-streams.util :as util]
             [jackdaw.streams :as j]

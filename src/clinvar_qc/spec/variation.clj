@@ -1,7 +1,7 @@
 (ns clinvar-qc.spec.variation
   (:require [clojure.spec.alpha :as spec]
             [clinvar-qc.spec.spec-asserts :as sa]
-            [clinvar-qc.util :refer :all]))
+            [clinvar-streams.util :refer :all]))
 
 
 (spec/def ::id sa/string-is-int?)

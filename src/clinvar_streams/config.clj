@@ -1,4 +1,4 @@
-(ns clinvar-qc.config
+(ns clinvar-streams.config
   (:require [taoensso.timbre :as timbre]
             [jackdaw.serdes :as j-serde])
   (:import java.lang.System)
@@ -10,13 +10,13 @@
   {:input
    {
     ;:topic-name         "clinvar-raw"
-    :topic-name         "broad-dsp-clinvar"
+    :topic-name         "clinvar-raw"
     :partition-count    1
     :replication-factor 1
     :key-serde          (j-serde/string-serde)
     :value-serde        (j-serde/string-serde)}
    :output
-   {:topic-name         "clinvar-qc"
+   {:topic-name         "clinvar-test"
     :partition-count    1
     :replication-factor 1
     :key-serde          (j-serde/string-serde)
@@ -27,9 +27,9 @@
    :kafka-user     (System/getenv "KAFKA_USER")
    :kafka-password (System/getenv "KAFKA_PASSWORD")
    :kafka-group    (System/getenv "KAFKA_GROUP")
-   :db-password    (System/getenv "CLINVAR_DB_PASSWORD")
-   :db-user        (System/getenv "CLINVAR_DB_USER")
-   :db-host        (or (System/getenv "CLINVAR_DB_HOST") "localhost")
+   ;:db-password    (System/getenv "CLINVAR_DB_PASSWORD")
+   ;:db-user        (System/getenv "CLINVAR_DB_USER")
+   ;:db-host        (or (System/getenv "CLINVAR_DB_HOST") "localhost")
    })
 
 (defn kafka-config

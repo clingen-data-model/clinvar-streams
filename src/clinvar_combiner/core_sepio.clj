@@ -1,13 +1,14 @@
-(ns clinvar-submissions.core-sepio
+(ns clinvar-combiner.core-sepio
   (:require [clinvar-submissions.db :as db]
-            [clinvar-submissions.core :as core
+            [clinvar-submissions.core_old :as core
              :refer [key-functions rocksdb]]
             [jackdaw.streams :as j]
             [jackdaw.serdes :as j-serde]
             [cheshire.core :as json]
             [taoensso.timbre :as log]
             [clojure.java.io :as io]
-            [clojure.string :as s])
+            [clojure.string :as s]
+            [clojure.set :as set])
   (:import [org.apache.kafka.streams KafkaStreams]
            [java.util Properties])
   (:gen-class))
@@ -28,16 +29,16 @@
 
 
           rcv-msg (if (not-empty (:rcv_accession_id content))
-                (let [rcv-key ((:rcv_accession key-functions) (:rcv_accession_id content))]
-                  (json/parse-string (db/get-key rocksdb rcv-key) true))
-                (do (log/warn "clinical assertion" (:id content) "had no rcv_accession_id")
-                    {}))
+                    (let [rcv-key ((:rcv_accession key-functions) (:rcv_accession_id content))]
+                      (json/parse-string (db/get-key rocksdb rcv-key) true))
+                    (do (log/warn "clinical assertion" (:id content) "had no rcv_accession_id")
+                        {}))
           rcv (:content rcv-msg)
 
           clinical-assertion-observation-keys (map #((:clinical_assertion_observation key-functions) %)
-                                                    (:clinical_assertion_observation_ids content))
+                                                   (:clinical_assertion_observation_ids content))
           clinical-assertion-observation-msgs (map #(json/parse-string (db/get-key rocksdb %) true)
-                                                clinical-assertion-observation-keys)
+                                                   clinical-assertion-observation-keys)
           clinical-assertion-observations (map #(:content %) clinical-assertion-observation-msgs)
 
           ; clinical_assertion_variation
@@ -45,16 +46,16 @@
           ; [id scv-id]
           clinical-assertion-variation-key-prefix ((:clinical_assertion_variation key-functions) "" (:id content))
           clinical-assertion-variation-msgs (map #(json/parse-string % true)
-                                             (map #(second %) ; get-prefix returns [[k v] [k v]]
-                                                  (db/get-prefix rocksdb clinical-assertion-variation-key-prefix)))
+                                                 (map #(second %) ; get-prefix returns [[k v] [k v]]
+                                                      (db/get-prefix rocksdb clinical-assertion-variation-key-prefix)))
           clinical-assertion-variations (map #(:content %) clinical-assertion-variation-msgs)
 
           ; variation_id
           variation-msg (if (not-empty (:variation_id content))
-                      (let [variation-key ((:variation key-functions) (:variation_id content))]
-                        (json/parse-string (db/get-key rocksdb variation-key) true))
-                      (do (log/warn "clinical assertion" (:id content) "has no variation_id")
-                        {}))
+                          (let [variation-key ((:variation key-functions) (:variation_id content))]
+                            (json/parse-string (db/get-key rocksdb variation-key) true))
+                          (do (log/warn "clinical assertion" (:id content) "has no variation_id")
+                              {}))
           variation (:content variation-msg)
 
           ; submitter_id
@@ -71,24 +72,24 @@
           ; trait-set-key ((:trait_set key-functions) (:trait_set_id content))
           ; trait-set (json/parse-string (db/get-key rocksdb trait-set-key) true)
           trait-set-msg (if (not-empty (:trait_set_id content))
-                      (let [trait-set-key ((:trait_set key-functions) (:trait_set_id content))]
-                        (json/parse-string (db/get-key rocksdb trait-set-key) true))
-                      {})
+                          (let [trait-set-key ((:trait_set key-functions) (:trait_set_id content))]
+                            (json/parse-string (db/get-key rocksdb trait-set-key) true))
+                          {})
           trait-set (:content trait-set-msg)
 
           ; TODO trait
           trait-msgs (if (not-empty trait-set)
-                   (let [trait-keys (map #((:trait key-functions) %) (:trait_ids trait-set))]
-                     (map #(json/parse-string (db/get-key rocksdb %) true) trait-keys))
-                   [])
+                       (let [trait-keys (map #((:trait key-functions) %) (:trait_ids trait-set))]
+                         (map #(json/parse-string (db/get-key rocksdb %) true) trait-keys))
+                       [])
           traits (map #(:content %) trait-msgs)
 
           ; TODO trait_mapping
           ; [scv-id trait-type mapping-type mapping-value mapping-ref medgen-id mapping-name]
           trait-mapping-msgs (map #(json/parse-string % true)
-                              (map #(second %)
-                                   (db/get-prefix rocksdb
-                                                  ((:trait_mapping key-functions) (:id content) "" "" "" "" "" "")))) ; Only pass SCV id
+                                  (map #(second %)
+                                       (db/get-prefix rocksdb
+                                                      ((:trait_mapping key-functions) (:id content) "" "" "" "" "" "")))) ; Only pass SCV id
           trait-mappings (map #(:content %) trait-mapping-msgs)
 
           ; TODO clinical_assertion_trait_set_id
@@ -100,19 +101,16 @@
 
       (let [; Construct top level fields
             contributions (map (fn [submission]
-                                 (-> {}
-                                     (assoc :id (:id submission))
-                                     (assoc :type "Contribution")
-                                     (assoc :contributionMadeTo (str "ClinVar:" (:id content) "." (:version content)))
-                                     (assoc :contributionMadeBy (str "ClinVarOrgId:" (:current_name submitter)))
-                                     (assoc :contributorRole ["submission"])
-                                     (assoc :startDate (:submission_date submission))
-                                     (assoc :endDate (:date_last_updated content))
-                                     ; rest of fields from submission
-                                     (assoc :extensions (remove
-                                                          #(contains? [:submission_date] %)
-                                                          (keys submission)))))
-                               [submission])
+                                 (let [m {:id                 (:id submission)
+                                          :type               "Contribution"
+                                          :contributionMadeTo (str "ClinVar:" (:id content) "." (:version content))
+                                          :contributionMadeBy (str "ClinVarOrgId:" (:current_name submitter))
+                                          :contributorRole    ["submission"]
+                                          :startDate          (:submission_date submission)
+                                          :endDate            (:date_last_updated content)}
+                                       leftover (set/difference (into #{} (keys submission)) (into #{} (keys m)))]
+                                   (assoc m :extensions (select-keys submission leftover)))
+                                 [submission]))
             ; TODO submitter + org
             agents (map (fn [s]
                           (-> {}
@@ -154,7 +152,7 @@
                         (assoc :vrs-objects vrs-objects)
                         (assoc :vrs-descriptors vrs-descriptors)
                         )]
-            out-rec)
+        out-rec)
 
       ;(let [updated-clinical-assertion
       ;      (-> clinical-assertion
