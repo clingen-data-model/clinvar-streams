@@ -16,23 +16,15 @@
                  [org.postgresql/postgresql "42.2.16"]
                  [org.xerial/sqlite-jdbc "3.32.3.2"]
                  ]
-  :repl-options {:init-ns clinvar-raw.core}
+  :repl-options {:init-ns clinvar-combiner.core}
   :main ^:skip-aot clinvar-streams.core
   :aot [clinvar-streams.core]
   :target-path "target/%s"
   :auto-clean false
-  :profiles {:uberjar {:uberjar-name "clinvar-streams.jar"}
+  :profiles {:uberjar {:uberjar-name "clinvar-streams.jar"
+                       :aot :all}
              :testdata {:main clinvar-raw.generate-local-topic
                         ;:aot [#"clinvar-raw.*"]
                         :repl-options {:init-ns clinvar-raw.generate-local-topic}}
              }
-  ;:profiles {:clinvar-raw {:main clinvar-raw.core
-  ;                         :uberjar-name "clinvar-raw.jar"
-  ;                         :aot [#"clinvar-raw.*"]
-  ;                         :jar-inclusions [#"clinvar-raw.*"]}
-  ;           :clinvar-qc  {:main clinvar-qc.core
-  ;                         :uberjar-name "clinvar-qc.jar"
-  ;                         :aot [#"clinvar-qc.*"]
-  ;                         :jar-inclusions [#"clinvar-qc.*"]}}
-
   )
