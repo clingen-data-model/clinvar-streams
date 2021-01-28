@@ -1,1 +1,0 @@
-{"id":"SCV000588440.0","content":"{\"Comment\":{\"$\":\"%MAF(ExAC):0.5167\"},\"Method\":{\"MethodType\":{\"$\":\"research\"}},\"ObservedData\":{\"Attribute\":{\"$\":\"not provided\",\"@Type\":\"Description\"}},\"Sample\":{\"AffectedStatus\":{\"$\":\"unknown\"},\"Origin\":{\"$\":\"germline\"},\"Species\":{\"$\":\"human\",\"@TaxonomyId\":\"9606\"}}}"}

@@ -1,1 +1,0 @@
-{"id":"SCV001152145.0","content":"{\"Method\":{\"MethodType\":{\"$\":\"clinical testing\"}},\"ObservedData\":{\"Attribute\":{\"@Type\":\"VariantAlleles\",\"@integerValue\":\"6\"}},\"Sample\":{\"AffectedStatus\":{\"$\":\"yes\"},\"Origin\":{\"$\":\"germline\"},\"Species\":{\"$\":\"human\",\"@TaxonomyId\":\"9606\"}}}"}
