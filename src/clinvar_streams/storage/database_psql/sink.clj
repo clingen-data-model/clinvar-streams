@@ -1,4 +1,4 @@
-(ns clinvar-qc.database-psql.sink
+(ns clinvar-streams.storage.database-psql.sink
   (:require [clinvar-qc.database-psql.client :as db-client]
             [clinvar-qc.util :refer :all]
             [cheshire.core :as json]

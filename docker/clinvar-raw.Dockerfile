@@ -9,7 +9,7 @@ WORKDIR /usr/src/app
 RUN lein deps
 
 COPY . /usr/src/app
-RUN lein with-profile clinvar-raw uberjar
+RUN lein with-profile +clinvar-raw uberjar
 
 # Using image without lein for deployment.
 FROM openjdk:11

@@ -16,15 +16,14 @@ Usage from REPL:
             [cheshire.core :as json]
             [jackdaw.client :as jc]
             [jackdaw.data :as jd]
-            [taoensso.timbre :as log])
-  (:import [java.io File])
+            [taoensso.timbre :as log]
+            [clinvar-raw.config :as cfg])
+  (:import [java.io File]
+           (java.text SimpleDateFormat)
+           (java.util TimeZone)
+           (java.time Duration))
   (:gen-class))
 
-(defn process-directories
-  ""
-  [dir-list]
-  (doseq [dirname dir-list]
-    ))
 
 (defn is-dir?
   [& path-segs]
@@ -47,18 +46,40 @@ Usage from REPL:
 
 (defn yyyymmmdd-split
   [date]
-  (if (re-matches #"\d{8}" date)
+  (if (re-matches #"\d{8}.*" date)
     (s/join "-"
             ; group 0 is matching string
             (rest (re-find (re-matcher #"(\d{4})(\d{2})(\d{2})" date))))
     date))
 
+;(defn str-to-date
+;  [s]
+;  (cond
+;    (re-matches #"\d{8}" s) (let [sdf (SimpleDateFormat. "yyyyMMdd")]
+;                              (.setTimeZone sdf (TimeZone/getTimeZone "UTC"))
+;                              (.parse sdf s))
+;    (re-matches #"\d{8}T\d{6}" s) (let [sdf (SimpleDateFormat. "yyyyMMdd'T'HHmmss")]
+;                                      (.setTimeZone sdf (TimeZone/getTimeZone "UTC"))
+;                                      (.parse sdf s))
+;    :default (throw (ex-info "Failed to parse time string" {:cause s}))
+;    ))
+;
+;(defn str-to-date-test
+;  []
+;  (println (str-to-date "20201028"))
+;  (println (str-to-date "20201028T123045"))
+;  )
+
+(defn list-files-sorted
+  [root-dir]
+  (sort-by #(.getName %) (.listFiles (io/file root-dir))))
+
 (defn generate-drop-messages
   [{:keys [root-dir root-matcher]
-    :or   {root-matcher #(re-matches #"\d{8}" %)            ; YYYYMMDD
+    :or   {root-matcher #(re-matches #"\d{8}.*" %)          ; YYYYMMDD
            }}]
 
-  (for [date-dir (.listFiles (io/file root-dir))]
+  (for [date-dir (filter #(and (root-matcher (.getName %)) (.isDirectory %)) (list-files-sorted root-dir))]
     (let [file-listing (filter #(not (nil? %))
                                (for [file (file-seq date-dir)]
                                  (let [relative-path (trim-leading "/" (subs (.getPath file) (count root-dir)))]
@@ -110,20 +131,61 @@ Usage from REPL:
     ))
 
 (defn -main
-  ""
+  "Must provide argument map with :root-dir and :topic-name.
+
+  Example: {:root-dir \"./test/clinvar_raw/testdata_20201021\" :topic-name \"broad-dsp-clinvar-testdata-20201021\"}"
   [{:keys [root-dir]}]
-  (let [drop-messages (generate-drop-messages {:root-dir root-dir})]
-    (save-to-topic-file
-      (map (fn [m] {:key   (:release_date m)
-                    :value m})
-           drop-messages)
-      "testset-drops.topic")
+  (let [dataset-name (.getName (io/file root-dir))
+        dsp-topic (str "broad-dsp-clinvar-" dataset-name)
+        clinvar-raw-topic (str "clinvar-raw-" dataset-name)
+        drop-messages (generate-drop-messages {:root-dir root-dir})
+        jackdaw-messages (map (fn [m] {:key   (:release_date m)
+                                       :value m})
+                              drop-messages)]
+    (save-to-topic-file jackdaw-messages (str dsp-topic ".topic"))
+    (upload-to-topic jackdaw-messages
+                     (raw-config/kafka-config (raw-config/app-config))
+                     dsp-topic)
     ; Might block if # msg is more than size of raw-core/producer-channel (1000)
-    (process-local-drop-messages drop-messages)
-    (let [producer-messages (chan-get-available! raw-core/producer-channel)
-          topic-name "kferriter-testset"]
-      (save-to-topic-file producer-messages "testset.topic")
-      (log/info "Uploading " (count producer-messages) " to " topic-name)
-      (upload-to-topic producer-messages
-                       (raw-config/kafka-config raw-config/app-config)
-                       topic-name))))
+    ;(.start (Thread. (partial process-local-drop-messages drop-messages)))
+    ;(let [producer-messages (chan-get-available! raw-core/producer-channel)]
+    ;  (save-to-topic-file producer-messages (str topic-name ".topic"))
+    ;  (log/info "Uploading " (count producer-messages) " to " topic-name)
+    ;  (upload-to-topic producer-messages
+    ;                   (raw-config/kafka-config raw-config/app-config)
+    ;                   topic-name))
+
+    ;(.start (Thread. (partial raw-core/-main)))
+
+    (let [app-config (-> (cfg/app-config)
+                         (assoc :kafka-consumer-topic dsp-topic)
+                         (assoc :kafka-producer-topic clinvar-raw-topic)
+                         (assoc :storage-protocol "file://")
+                         )
+          kafka-config (cfg/kafka-config app-config)]
+      (reset! raw-core/send-update-to-exchange-counter 0)
+      (.start (Thread. (partial
+                         raw-core/process-drop-messages app-config)))
+      (.start (Thread. (partial
+                         raw-core/send-producer-messages app-config kafka-config)))
+      (.start (Thread. (partial
+                         raw-core/listen-for-clinvar-drop app-config kafka-config)))
+
+      (log/info "Waiting for " (count jackdaw-messages)
+                " to be sent to output topic" clinvar-raw-topic)
+      (while (not= (:value @raw-core/last-received-clinvar-drop)
+                   (json/generate-string (:value (last jackdaw-messages))))
+        (log/infof "Sent %d messages so far" @raw-core/send-update-to-exchange-counter)
+        (log/info "Last drop received" @raw-core/last-received-clinvar-drop)
+        (Thread/sleep 3000))
+
+      ; Probably not necessary
+      ; Closing channel still lets it exhaust rest of channel
+      (log/info "Waiting 10 seconds")
+      (Thread/sleep 10000)
+
+      (reset! raw-core/listening-for-drop false)
+      (async/close! raw-core/producer-channel)
+      )
+
+    ))

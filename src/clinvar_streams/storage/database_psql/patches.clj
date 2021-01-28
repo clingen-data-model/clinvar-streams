@@ -1,4 +1,4 @@
-(ns clinvar-qc.database-psql.patches
+(ns clinvar-streams.storage.database-psql.patches
   (:require [clojure.java.jdbc :refer :all]))
 
 (defn message-triggers [])

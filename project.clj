@@ -7,6 +7,7 @@
                  [org.clojure/core.async "1.2.603"]
                  [org.clojure/tools.namespace "1.0.0"]
                  [org.clojure/java.jdbc "0.7.11"]
+                 [org.clojure/tools.cli "1.0.194"]
                  [cheshire "5.10.0"]
                  [fundingcircle/jackdaw "0.7.4"]
                  [com.google.cloud/google-cloud-storage "1.101.0"]
@@ -16,15 +17,22 @@
                  [org.xerial/sqlite-jdbc "3.32.3.2"]
                  ]
   :repl-options {:init-ns clinvar-raw.core}
-  ;:main ^:skip-aot clinvar-streams.core
+  :main ^:skip-aot clinvar-streams.core
+  :aot [clinvar-streams.core]
   :target-path "target/%s"
   :auto-clean false
-  :profiles {:clinvar-raw {:main clinvar-raw.core
-                           :uberjar-name "clinvar-raw.jar"
-                           :aot [#"clinvar-raw.*"]
-                           :jar-inclusions [#"clinvar-raw.*"]}
-             :clinvar-qc  {:main clinvar-qc.core
-                           :uberjar-name "clinvar-qc.jar"
-                           :aot [#"clinvar-qc.*"]
-                           :jar-inclusions [#"clinvar-qc.*"]}}
+  :profiles {:uberjar {:uberjar-name "clinvar-streams.jar"}
+             :testdata {:main clinvar-raw.generate-local-topic
+                        ;:aot [#"clinvar-raw.*"]
+                        :repl-options {:init-ns clinvar-raw.generate-local-topic}}
+             }
+  ;:profiles {:clinvar-raw {:main clinvar-raw.core
+  ;                         :uberjar-name "clinvar-raw.jar"
+  ;                         :aot [#"clinvar-raw.*"]
+  ;                         :jar-inclusions [#"clinvar-raw.*"]}
+  ;           :clinvar-qc  {:main clinvar-qc.core
+  ;                         :uberjar-name "clinvar-qc.jar"
+  ;                         :aot [#"clinvar-qc.*"]
+  ;                         :jar-inclusions [#"clinvar-qc.*"]}}
+
   )

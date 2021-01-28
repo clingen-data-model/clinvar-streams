@@ -1,4 +1,4 @@
-(ns clinvar-qc.database-psql.client
+(ns clinvar-streams.storage.database-psql.client
   (:require [clojure.java.io :as io]
             [clojure.java.jdbc :refer :all]
             [clojure.java.shell :refer :all]
@@ -10,7 +10,7 @@
 (def db (atom {}))
 (def datasource (atom nil))
 
-(def sql-root "src/clinvar_qc/database_psql/sql")
+(def sql-root "src/clinvar_streams/storage/database_psql/sql")
 
 (defn sql-path
   "Returns a cwd-rooted path for a sql filename under the project's sql directory.

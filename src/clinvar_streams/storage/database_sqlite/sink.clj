@@ -1,4 +1,4 @@
-(ns clinvar-qc.database.sink
+(ns clinvar-streams.storage.database_sqlite.sink
   (:require [clinvar-qc.database.client :as db-client]
             [clinvar-qc.util :refer :all]
             [cheshire.core :as json]

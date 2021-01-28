@@ -1,4 +1,4 @@
-(ns clinvar-qc.database.client
+(ns clinvar-streams.storage.database_sqlite.client
   (:require [clojure.java.io :as io]
             [clojure.java.jdbc :refer :all]
             [clojure.java.shell :refer :all]
@@ -8,7 +8,7 @@
 
 (def db (atom {}))
 
-(def sql-root "src/clinvar_qc/database/sql")
+(def sql-root "src/clinvar_streams/storage/database_sqlite/sql")
 
 (defn sql-path
   "Returns a cwd-rooted path for a sql filename under the project's sql directory.
