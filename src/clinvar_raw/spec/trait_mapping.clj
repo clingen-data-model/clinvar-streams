@@ -1,7 +1,7 @@
 (ns clinvar-raw.spec.trait-mapping
   (:require [clojure.spec.alpha :as spec]
             [clinvar-raw.spec.spec-asserts :as sa]
-            [clinvar-raw.util :refer :all]))
+            [clinvar-streams.util :refer :all]))
 
 (spec/def ::clinical_assertion_id sa/scv-number?)
 (spec/def ::mapping_ref not-empty) ; TODO Looks like an enumeration

@@ -7,8 +7,8 @@
             [clinvar-qc.config :as cfg]
     ;[clinvar-qc.database-psql.client :as db-client]
     ;[clinvar-qc.database-psql.sink :as db-sink]
-            [clinvar-qc.database.client :as db-client]
-            [clinvar-qc.database.sink :as db-sink]
+            [clinvar-streams.storage.database-sqlite.client :as db-client]
+            [clinvar-streams.storage.database-sqlite.sink :as db-sink]
             [clinvar-qc.spec :as spec]
             [clojure.java.io :as io]
             [clojure.string :as s]
@@ -27,16 +27,6 @@
   (jc/seek-to-beginning-eager consumer)
   consumer)
 
-;(defn repair
-;  "Performs series of transformations on input topic and sends to output topic.
-;  Messages which meet criteria for modification are sent to output topic modified."
-;  [consumer-config ^String consumer-topic producer-config ^String producer-topic
-;   & {:keys [reset-consumer-offset] :or {reset-consumer-offset false}}]
-;  (with-open [consumer (jc/consumer consumer-config)
-;              producer (jc/producer producer-config)]
-;    (jc/subscribe consumer [{:topic-name (:topic-name consumer-topic)}])
-;
-;    ))
 
 (defn store-in-database
   [[k v]]
@@ -45,23 +35,23 @@
   (db-sink/store-message v)
   )
 
-(def input-counter {:val       (atom 0)
+(def input-counter {:val       (atom (long 0))
                     :interval  10000
                     :timestamp (atom (Date.))})
 
 (defn count-msg
   [[k v]]
-  (swap! (:val input-counter) inc)
   (if (= 0 @(:val input-counter))
-    (reset! (:timestamp input-counter) (Date.))
-    (if (= 0 (mod @(:val input-counter) (:interval input-counter)))
-      (let [prev-time @(:timestamp input-counter)
-            cur-time (Date.)]
-        (log/infof "Read %d messages in %.6f seconds (last: %s)"
-                   (:interval input-counter)
-                   (double (/ (- (.getTime cur-time) (.getTime prev-time)) 1000))
-                   v
-                   (reset! (:timestamp input-counter) cur-time))))))
+    (reset! (:timestamp input-counter) (Date.)))
+  (swap! (:val input-counter) inc)
+  (if (= 0 (mod @(:val input-counter) (:interval input-counter)))
+    (let [prev-time @(:timestamp input-counter)
+          cur-time (Date.)]
+      (log/infof "Read %d messages in %.6f seconds (last: %s)"
+                 (:interval input-counter)
+                 (double (/ (- (.getTime cur-time) (.getTime prev-time)) 1000))
+                 v
+                 (reset! (:timestamp input-counter) cur-time)))))
 
 (defn topology [builder in-topic out-topic]
   "Builds a topology of operations to apply to a kstream from builder.
@@ -160,6 +150,8 @@
       (jc/subscribe consumer [{:topic-name (-> cfg/topic-metadata :input :topic-name)}])
       (while @running
         (let [msgs (jc/poll consumer (Duration/ofMillis 1000))]
+          (if (= 0 (count msgs))
+            (.flush @download-writer))
           (doseq [msg msgs]
             (let [k (:key msg) v (:value msg)]
               (count-msg [k v])
@@ -184,7 +176,7 @@
 
 (defn -download-input-topic-async
   []
-  (.start (Thread. (partial download-input-topic-async-reader read-chan)))
+  (.start (Thread. ^Runnable (partial download-input-topic-async-reader read-chan)))
   (let [output-filename (str (-> cfg/topic-metadata :input :topic-name) ".topic")]
     (reset! download-writer (io/writer output-filename))
     (with-open [consumer (jc/consumer (cfg/kafka-config cfg/app-config))

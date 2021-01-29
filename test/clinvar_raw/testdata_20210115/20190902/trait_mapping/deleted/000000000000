@@ -1,0 +1,3 @@
+{"medgen_name":"Costello syndrome","mapping_type":"XRef","mapping_ref":"OMIM","mapping_value":"218040","clinical_assertion_id":"SCV000062127","medgen_id":"C0587248","trait_type":"Disease"}
+{"medgen_name":"Non-small cell lung cancer","mapping_type":"XRef","mapping_ref":"MedGen","mapping_value":"C0007131","clinical_assertion_id":"SCV000061597","medgen_id":"C0007131","trait_type":"Disease"}
+{"medgen_name":"Familial adenomatous polyposis 1","mapping_type":"XRef","mapping_ref":"MedGen","mapping_value":"C2713442","clinical_assertion_id":"SCV000153895","medgen_id":"C2713442","trait_type":"Disease"}

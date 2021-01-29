@@ -1,0 +1,4 @@
+{"type":"Disease","trait_ids":["43699"],"id":"52596"}
+{"type":"Disease","trait_ids":["15855","16513"],"content":"{\"Name\":{\"ElementValue\":{\"$\":\"Noonan Syndrome/Leopard Syndrome\",\"@Type\":\"Preferred\"}},\"Symbol\":{\"ElementValue\":{\"$\":\"NS/LS\",\"@Type\":\"Preferred\"}}}","id":"8793"}
+{"type":"Disease","trait_ids":["14688","986"],"id":"53590"}
+{"type":"TraitChoice","trait_ids":["4296","765"],"id":"37725"}

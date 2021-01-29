@@ -1,0 +1,1 @@
+{"id":"SCV000803346.0","variation_type":"Variation","clinical_assertion_id":"SCV000803346","descendant_ids":[],"subclass_type":"SimpleAllele","child_ids":[],"content":"{\"AttributeSet\":{\"Attribute\":{\"$\":\"NM_000256.3:c.1504C\u003eT\",\"@Type\":\"HGVS\"}},\"GeneList\":{\"Gene\":{\"@Symbol\":\"MYBPC3\"}}}"}

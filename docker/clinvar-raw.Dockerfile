@@ -9,14 +9,14 @@ WORKDIR /usr/src/app
 RUN lein deps
 
 COPY . /usr/src/app
-RUN lein with-profile clinvar-raw uberjar
+RUN lein uberjar
 
 # Using image without lein for deployment.
 FROM openjdk:11
 MAINTAINER Kyle Ferriter <kferrite@broadinstitute.org>
 
-COPY --from=builder /usr/src/app/target/uberjar/clinvar-raw.jar /app/clinvar-raw.jar
+COPY --from=builder /usr/src/app/target/uberjar/clinvar-streams.jar /app/clinvar-streams.jar
 
 EXPOSE 8888
 
-CMD ["java", "-jar", "/app/clinvar-raw.jar"]
+CMD ["java", "-jar", "/app/clinvar-streams.jar"]

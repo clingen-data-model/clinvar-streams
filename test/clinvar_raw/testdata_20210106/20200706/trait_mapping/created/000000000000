@@ -1,0 +1,13 @@
+{"mapping_ref":"HP","medgen_name":"Narrow mouth","medgen_id":"C0026034","trait_type":"Finding","clinical_assertion_id":"SCV001366606","mapping_type":"XRef","mapping_value":"HP:0000160"}
+{"mapping_ref":"HP","medgen_name":"Thin upper lip vermilion","medgen_id":"C1865017","trait_type":"Finding","clinical_assertion_id":"SCV001366606","mapping_type":"XRef","mapping_value":"HP:0000219"}
+{"mapping_ref":"HP","medgen_name":"Micrognathia","medgen_id":"C0025990","trait_type":"Finding","clinical_assertion_id":"SCV001366606","mapping_type":"XRef","mapping_value":"HP:0000347"}
+{"mapping_ref":"HP","medgen_name":"Restlessness","medgen_id":"C3887611","trait_type":"Finding","clinical_assertion_id":"SCV001366606","mapping_type":"XRef","mapping_value":"HP:0000711"}
+{"mapping_ref":"HP","medgen_name":"Autistic behavior","medgen_id":"C0856975","trait_type":"Finding","clinical_assertion_id":"SCV001366606","mapping_type":"XRef","mapping_value":"HP:0000729"}
+{"mapping_ref":"HP","medgen_name":"Delayed speech and language development","medgen_id":"C0454644","trait_type":"Finding","clinical_assertion_id":"SCV001366606","mapping_type":"XRef","mapping_value":"HP:0000750"}
+{"mapping_ref":"HP","medgen_name":"Abnormality of metabolism/homeostasis","medgen_id":"C4021768","trait_type":"Finding","clinical_assertion_id":"SCV001366606","mapping_type":"XRef","mapping_value":"HP:0001939"}
+{"mapping_ref":"HP","medgen_name":"Malabsorption","medgen_id":"C3714745","trait_type":"Finding","clinical_assertion_id":"SCV001366606","mapping_type":"XRef","mapping_value":"HP:0002024"}
+{"mapping_ref":"HP","medgen_name":"Hyperhomocystinemia","medgen_id":"C3806347","trait_type":"Finding","clinical_assertion_id":"SCV001366354","mapping_type":"XRef","mapping_value":"HP:0002160"}
+{"mapping_ref":"HP","medgen_name":"Abnormality of mitochondrial metabolism","medgen_id":"C4021734","trait_type":"Finding","clinical_assertion_id":"SCV001366606","mapping_type":"XRef","mapping_value":"HP:0003287"}
+{"mapping_ref":"HP","medgen_name":"Sacral meningocele","medgen_id":"C0521556","trait_type":"Finding","clinical_assertion_id":"SCV001368806","mapping_type":"XRef","mapping_value":"HP:0005765"}
+{"mapping_ref":"HP","medgen_name":"Yellow subcutaneous tissue covered by thin, scaly skin","medgen_id":"C1850533","trait_type":"Finding","clinical_assertion_id":"SCV001366606","mapping_type":"XRef","mapping_value":"HP:0007525"}
+{"mapping_ref":"HP","medgen_name":"Profound global developmental delay","medgen_id":"C3553450","trait_type":"Finding","clinical_assertion_id":"SCV001366606","mapping_type":"XRef","mapping_value":"HP:0012736"}

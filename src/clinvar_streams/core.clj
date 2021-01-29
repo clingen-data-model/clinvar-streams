@@ -1,3 +1,13 @@
-(ns clinvar-streams.core)
+(ns clinvar-streams.core
+  (:require [clojure.tools.cli :as cli]
+            [clinvar-raw.core :as raw-core]
+            [clinvar-qc.core :as qc-core])
+  (:gen-class))
 
-(throw (ex-info "Not a legitimate main file. Use clinvar-raw.core or clinvar-qc.core" {}))
+(defn -main [& args]
+  (assert (< 0 (count args)) "Must provide mode argument")
+  (let [mode (first args)]
+    (cond
+      (= "clinvar-raw" mode) (raw-core/-main (rest args))
+      (= "clinvar-qc" mode) (qc-core/-main (rest args))
+      :default (throw (ex-info "Unrecognized startup mode" {:cause mode})))))

@@ -1,1 +1,0 @@
-{"id":"SCV001343079.0","content":"{\"Method\":{\"MethodType\":{\"$\":\"clinical testing\"},\"TypePlatform\":{\"$\":\"NGS\"}},\"ObservedData\":{\"Attribute\":{\"$\":\"not provided\",\"@Type\":\"Description\"}},\"Sample\":{\"AffectedStatus\":{\"$\":\"unknown\"},\"Origin\":{\"$\":\"germline\"},\"Species\":{\"$\":\"human\",\"@TaxonomyId\":\"9606\"}}}"}

@@ -1,0 +1,3 @@
+{"mapping_ref":"MedGen","medgen_id":"C1956125","trait_type":"Disease","mapping_type":"XRef","medgen_name":"Alagille syndrome 1","mapping_value":"C1956125","clinical_assertion_id":"SCV000645524"}
+{"mapping_ref":"Preferred","medgen_id":"CN517202","trait_type":"Disease","mapping_type":"Name","medgen_name":"not provided","mapping_value":"Not Provided","clinical_assertion_id":"SCV000321788"}
+{"mapping_ref":"Preferred","medgen_id":"CN517202","trait_type":"Disease","mapping_type":"Name","medgen_name":"not provided","mapping_value":"not provided","clinical_assertion_id":"SCV000708478"}

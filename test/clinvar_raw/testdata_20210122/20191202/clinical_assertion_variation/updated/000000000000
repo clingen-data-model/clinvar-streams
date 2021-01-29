@@ -1,0 +1,1 @@
+{"id":"SCV000694042.0","descendant_ids":[],"variation_type":"Variation","child_ids":[],"clinical_assertion_id":"SCV000694042","content":"{\"AttributeSet\":{\"Attribute\":{\"$\":\"NM_000038.5:c.3920T\u003eA\",\"@Type\":\"HGVS\"}},\"GeneList\":{\"Gene\":{\"@Symbol\":\"APC\"}}}","subclass_type":"SimpleAllele"}

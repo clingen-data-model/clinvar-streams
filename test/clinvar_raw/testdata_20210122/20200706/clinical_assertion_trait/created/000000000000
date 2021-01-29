@@ -1,0 +1,14 @@
+{"trait_id":"17060","id":"SCV001366606.4","alternate_names":[],"xrefs":["{\"db\":\"HP\",\"id\":\"HP:0000729\"}"],"type":"Finding","medgen_id":"C0856975"}
+{"trait_id":"17072","id":"SCV001366606.2","alternate_names":[],"xrefs":["{\"db\":\"HP\",\"id\":\"HP:0000347\"}"],"type":"Finding","medgen_id":"C0025990"}
+{"trait_id":"17145","id":"SCV001366606.6","alternate_names":[],"xrefs":["{\"db\":\"HP\",\"id\":\"HP:0001939\"}"],"type":"Finding","medgen_id":"C4021768"}
+{"trait_id":"18105","id":"SCV001366606.5","alternate_names":[],"xrefs":["{\"db\":\"HP\",\"id\":\"HP:0000750\"}"],"type":"Finding","medgen_id":"C0454644"}
+{"trait_id":"21470","id":"SCV001366606.0","alternate_names":[],"xrefs":["{\"db\":\"HP\",\"id\":\"HP:0000160\"}"],"type":"Finding","medgen_id":"C0026034"}
+{"trait_id":"21514","id":"SCV001366606.1","alternate_names":[],"xrefs":["{\"db\":\"HP\",\"id\":\"HP:0000219\"}"],"type":"Finding","medgen_id":"C1865017"}
+{"trait_id":"21868","id":"SCV001366606.3","alternate_names":[],"xrefs":["{\"db\":\"HP\",\"id\":\"HP:0000711\"}"],"type":"Finding","medgen_id":"C3887611"}
+{"trait_id":"22787","id":"SCV001366606.7","alternate_names":[],"xrefs":["{\"db\":\"HP\",\"id\":\"HP:0002024\"}"],"type":"Finding","medgen_id":"C3714745"}
+{"trait_id":"22889","id":"SCV001366354.0","alternate_names":[],"xrefs":["{\"db\":\"HP\",\"id\":\"HP:0002160\"}"],"type":"Finding","medgen_id":"C3806347"}
+{"trait_id":"23683","id":"SCV001366606.8","alternate_names":[],"xrefs":["{\"db\":\"HP\",\"id\":\"HP:0003287\"}"],"type":"Finding","medgen_id":"C4021734"}
+{"trait_id":"25230","id":"SCV001368806.0","alternate_names":[],"xrefs":["{\"db\":\"HP\",\"id\":\"HP:0005765\"}"],"type":"Finding","medgen_id":"C0521556"}
+{"trait_id":"26244","id":"SCV001366606.9","alternate_names":[],"xrefs":["{\"db\":\"HP\",\"id\":\"HP:0007525\"}"],"type":"Finding","medgen_id":"C1850533"}
+{"trait_id":"30616","id":"SCV001366606.10","alternate_names":[],"xrefs":["{\"db\":\"HP\",\"id\":\"HP:0012736\"}"],"type":"Finding","medgen_id":"C3553450"}
+{"name":"Colorectal cancer","trait_id":"32349","id":"SCV001365521.0","alternate_names":[],"xrefs":[],"type":"Disease","medgen_id":"C1527249"}

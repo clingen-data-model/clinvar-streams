@@ -1,0 +1,12 @@
+{"keywords":[],"attribute_content":[],"alternate_names":[],"type":"Disease","alternate_symbols":[],"xrefs":["{\"db\":\"MeSH\",\"id\":\"D008545\"}"],"id":"53556"}
+{"keywords":[],"attribute_content":[],"alternate_names":[],"type":"Disease","alternate_symbols":[],"xrefs":["{\"db\":\"MeSH\",\"id\":\"D008545\"}"],"id":"53554"}
+{"keywords":[],"attribute_content":[],"alternate_names":[],"type":"Disease","alternate_symbols":[],"xrefs":["{\"db\":\"Human Phenotype Ontology\",\"id\":\"HP:0100603\",\"type\":\"primary\"}"],"id":"53579"}
+{"keywords":[],"attribute_content":[],"alternate_names":[],"type":"Disease","alternate_symbols":[],"xrefs":["{\"db\":\"Human Phenotype Ontology\",\"id\":\"HP:0200135\",\"type\":\"primary\"}"],"id":"53581"}
+{"keywords":[],"attribute_content":[],"alternate_names":[],"type":"Finding","alternate_symbols":[],"xrefs":["{\"db\":\"Human Phenotype Ontology\",\"id\":\"HP:0008017\",\"type\":\"primary\"}"],"id":"53567"}
+{"keywords":[],"attribute_content":[],"alternate_names":[],"type":"Finding","alternate_symbols":[],"xrefs":["{\"db\":\"Human Phenotype Ontology\",\"id\":\"HP:0008356\",\"type\":\"primary\"}"],"id":"53569"}
+{"keywords":[],"attribute_content":[],"alternate_names":[],"type":"Finding","alternate_symbols":[],"xrefs":["{\"db\":\"Human Phenotype Ontology\",\"id\":\"HP:0100805\",\"type\":\"primary\"}"],"id":"53580"}
+{"keywords":[],"attribute_content":[],"alternate_names":[],"type":"Finding","alternate_symbols":[],"xrefs":["{\"db\":\"Human Phenotype Ontology\",\"id\":\"HP:0001587\",\"type\":\"primary\"}"],"id":"53561"}
+{"keywords":[],"attribute_content":[],"alternate_names":[],"type":"Finding","alternate_symbols":[],"xrefs":["{\"db\":\"Human Phenotype Ontology\",\"id\":\"HP:0000057\",\"type\":\"primary\"}"],"id":"53559"}
+{"keywords":[],"attribute_content":[],"alternate_names":[],"type":"Finding","alternate_symbols":[],"xrefs":["{\"db\":\"Human Phenotype Ontology\",\"id\":\"HP:0006158\",\"type\":\"primary\"}"],"id":"53563"}
+{"keywords":[],"attribute_content":[],"alternate_names":[],"type":"Finding","alternate_symbols":[],"xrefs":["{\"db\":\"Human Phenotype Ontology\",\"id\":\"HP:0007901\",\"type\":\"primary\"}"],"id":"53566"}
+{"keywords":[],"attribute_content":[],"name":"Ligamentous laxity","alternate_names":["Joint ligamentous laxity"],"type":"Finding","alternate_symbols":[],"xrefs":[],"id":"18031"}

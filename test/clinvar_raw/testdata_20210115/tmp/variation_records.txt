@@ -1,0 +1,1 @@
+20190701/variation//created/000000000001:52191:{"name":"NM_020975.4:c.[1901G\u003eA];[200G\u003eA;874G\u003eA;2944C\u003eT]","variation_type":"CompoundHeterozygote","subclass_type":"Genotype","protein_change":[],"id":"549768","descendant_ids":["549767","13909","41839","24880","13938"],"child_ids":["549767","13909"]}
