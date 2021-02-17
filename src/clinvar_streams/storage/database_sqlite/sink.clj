@@ -630,27 +630,26 @@
       (reduce + updated-counts))))
 
 (defn get-dirty
-  "Returns lazy seq of all dirty records in this release"
+  "Returns lazy seq of all dirty records in this release.
+  Avoid negating the laziness of the returned seq."
   [release-sentinel]
   (log/info "Getting all dirty non-scv records from release: " (str release-sentinel))
   (let [release-date (:release_date release-sentinel)
         get-simple (fn [table-name]
                      (let [s (format "select * from %s where dirty = 1 and release_date = ?" table-name)
-                           ;u (format "update %s set dirty = 0 where release_date = ?" table-name)
+                           u (format "update %s set dirty = 0 where release_date = ?" table-name)
                            rs (query @db-client/db [s release-date])]
                        ;(execute! @db-client/db [u release-date])
                        rs))]
-    (lazy-cat (get-simple "submitter")
-              (get-simple "submission")
-              (get-simple "trait")
-              (get-simple "trait_set")
-              (get-simple "gene")
-              (get-simple "variation")
-              (get-simple "gene_association")
-              (get-simple "variation_archive")
-              (get-simple "rcv_accession"))
-    )
-  )
+    (lazy-cat (map #(assoc % :entity_type "submitter") (get-simple "submitter"))
+              (map #(assoc % :entity_type "submission") (get-simple "submission"))
+              (map #(assoc % :entity_type "trait") (get-simple "trait"))
+              (map #(assoc % :entity_type "trait_set") (get-simple "trait_set"))
+              (map #(assoc % :entity_type "gene") (get-simple "gene"))
+              (map #(assoc % :entity_type "variation") (get-simple "variation"))
+              (map #(assoc % :entity_type "gene_association") (get-simple "gene_association"))
+              (map #(assoc % :entity_type "variation_archive") (get-simple "variation_archive"))
+              (map #(assoc % :entity_type "rcv_accession") (get-simple "rcv_accession")))))
 
 (defn dirty-bubble-scv
   "Propagates dirtiness of record A to record B which when aggregated contains A"
@@ -929,6 +928,8 @@
                                       (query @db-client/db [sql scv-id])))
 
           ; Process some internal fields
+          clinical-assertion (assoc clinical-assertion :entity_type "clinical_assertion")
+
           clinical-assertion
           (assoc clinical-assertion :submission_names
                                     (json/parse-string (:submission_names clinical-assertion)))
