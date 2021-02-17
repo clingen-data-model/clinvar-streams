@@ -151,7 +151,7 @@
     (jc/seek consumer (TopicPartition. topic-name 0) 0)
     (log/info "Polling for messages")
     (while @continue
-      (let [msgs (jc/poll consumer (Duration/ofMillis 1000))]
+      (let [msgs (jc/poll consumer (Duration/ofMillis 5000))]
         (log/info "Poll loop")
         (doseq [msg msgs]
           (log/info msg)
