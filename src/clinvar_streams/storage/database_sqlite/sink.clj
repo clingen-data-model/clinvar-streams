@@ -641,15 +641,19 @@
                            rs (query @db-client/db [s release-date])]
                        ;(execute! @db-client/db [u release-date])
                        rs))]
-    (lazy-cat (map #(assoc % :entity_type "submitter") (get-simple "submitter"))
-              (map #(assoc % :entity_type "submission") (get-simple "submission"))
-              (map #(assoc % :entity_type "trait") (get-simple "trait"))
-              (map #(assoc % :entity_type "trait_set") (get-simple "trait_set"))
-              (map #(assoc % :entity_type "gene") (get-simple "gene"))
-              (map #(assoc % :entity_type "variation") (get-simple "variation"))
-              (map #(assoc % :entity_type "gene_association") (get-simple "gene_association"))
-              (map #(assoc % :entity_type "variation_archive") (get-simple "variation_archive"))
-              (map #(assoc % :entity_type "rcv_accession") (get-simple "rcv_accession")))))
+    (map
+      (fn [rec] (if (= "delete" (:event_type rec))
+                  (assoc rec :deleted true)
+                  rec))
+      (lazy-cat (map #(assoc % :entity_type "submitter") (get-simple "submitter"))
+                (map #(assoc % :entity_type "submission") (get-simple "submission"))
+                (map #(assoc % :entity_type "trait") (get-simple "trait"))
+                (map #(assoc % :entity_type "trait_set") (get-simple "trait_set"))
+                (map #(assoc % :entity_type "gene") (get-simple "gene"))
+                (map #(assoc % :entity_type "variation") (get-simple "variation"))
+                (map #(assoc % :entity_type "gene_association") (get-simple "gene_association"))
+                (map #(assoc % :entity_type "variation_archive") (get-simple "variation_archive"))
+                (map #(assoc % :entity_type "rcv_accession") (get-simple "rcv_accession"))))))
 
 (defn dirty-bubble-scv
   "Propagates dirtiness of record A to record B which when aggregated contains A"
