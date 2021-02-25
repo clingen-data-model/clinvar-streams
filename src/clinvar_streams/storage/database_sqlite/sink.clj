@@ -93,7 +93,7 @@
                                  {:cause {:sql sql :types type-map :values value-map}}))))
              (catch Exception e
                (log/error (ex-info "Exception on insert"
-                                   {:cause     {:sql sql :types type-map :values value-map}
+                                   {:cause {:sql sql :types type-map :values value-map}
                                     :sql-state (.getSQLState e)}))
                (throw e)))))))
 
@@ -163,23 +163,23 @@
 
 (defn store-submitter
   [submitter]
-  (let [types {:release_date   :string
-               :dirty          :int
-               :event_type     :string
+  (let [types {:release_date :string
+               :dirty :int
+               :event_type :string
 
-               :id             :int
-               :org_category   :string
-               :current_name   :string
+               :id :int
+               :org_category :string
+               :current_name :string
                :current_abbrev :string
-               :all_names      :string
-               :all_abbrevs    :string}
+               :all_names :string
+               :all_abbrevs :string}
         values (merge (select-keys submitter (keys types))
-                      {:dirty       1
-                       :all_names   (json/generate-string (:all_names submitter))
+                      {:dirty 1
+                       :all_names (json/generate-string (:all_names submitter))
                        :all_abbrevs (json/generate-string (:all_abbrevs submitter))})]
     (assert-insert {:table-name "submitter"
-                    :type-map   types
-                    :value-map  values})
+                    :type-map types
+                    :value-map values})
     ;(doseq [name (:all_names submitter)]
     ;  (assert-insert {:table-name "submitter_names"
     ;                  :type-map   names-types
@@ -200,361 +200,361 @@
 
 (defn store-submission
   [submission]
-  (let [types {:release_date    :string
-               :dirty           :int
-               :event_type      :string
+  (let [types {:release_date :string
+               :dirty :int
+               :event_type :string
 
-               :id              :string
+               :id :string
                :submission_date :string
-               :submitter_id    :int}
+               :submitter_id :int}
         values (merge (select-keys submission (keys types))
-                      {:dirty                    1
+                      {:dirty 1
                        :additional_submitter_ids (json/generate-string (:all_names submission))})]
     (assert-insert {:table-name "submission"
-                    :type-map   types
-                    :value-map  values})))
+                    :type-map types
+                    :value-map values})))
 
 (defn store-trait
   [trait]
-  (let [trait-types {:release_date      :string
-                     :dirty             :int
-                     :event_type        :string
+  (let [trait-types {:release_date :string
+                     :dirty :int
+                     :event_type :string
 
-                     :id                :string
-                     :medgen_id         :string
-                     :type              :string
-                     :name              :string
-                     :content           :string
-                     :alternate_names   :string
+                     :id :string
+                     :medgen_id :string
+                     :type :string
+                     :name :string
+                     :content :string
+                     :alternate_names :string
                      :alternate_symbols :string
-                     :keywords          :string
+                     :keywords :string
                      :attribute_content :string
-                     :xrefs             :string}
+                     :xrefs :string}
         values (merge (select-keys trait (keys trait-types))
-                      {:dirty             1
-                       :alternate_names   (json/generate-string (:alternate_names trait))
+                      {:dirty 1
+                       :alternate_names (json/generate-string (:alternate_names trait))
                        :alternate_symbols (json/generate-string (:alternate_symbols trait))
-                       :keywords          (json/generate-string (:keywords trait))
+                       :keywords (json/generate-string (:keywords trait))
                        :attribute_content (json-string-if-not-string (:attribute_content trait))
-                       :xrefs             (json-string-if-not-string (:xrefs trait))})]
+                       :xrefs (json-string-if-not-string (:xrefs trait))})]
     (assert-insert {:table-name "trait"
-                    :type-map   trait-types
-                    :value-map  values})))
+                    :type-map trait-types
+                    :value-map values})))
 
 (defn store-trait-set
   [trait-set]
   (let [types {:release_date :string
-               :dirty        :int
-               :event_type   :string
+               :dirty :int
+               :event_type :string
 
-               :id           :int
-               :type         :string
-               :content      :string
-               :trait_ids    :string}
+               :id :int
+               :type :string
+               :content :string
+               :trait_ids :string}
         values (merge (select-keys trait-set (keys types))
-                      {:dirty     1
+                      {:dirty 1
                        :trait_ids (json/generate-string (:trait_ids trait-set))})]
     (assert-insert {:table-name "trait_set"
-                    :type-map   types
-                    :value-map  values})))
+                    :type-map types
+                    :value-map values})))
 
 (defn store-clinical-assertion-trait-set
   [clinical-assertion-trait-set]
-  (let [types {:release_date                 :string
-               :dirty                        :int
-               :event_type                   :string
+  (let [types {:release_date :string
+               :dirty :int
+               :event_type :string
 
-               :id                           :string
-               :type                         :string
-               :content                      :string
+               :id :string
+               :type :string
+               :content :string
                :clinical_assertion_trait_ids :string}
         values (merge (select-keys clinical-assertion-trait-set (keys types))
                       {:dirty 1
                        :clinical_assertion_trait_ids
-                              (json/generate-string (:clinical_assertion_trait_ids clinical-assertion-trait-set))})
+                       (json/generate-string (:clinical_assertion_trait_ids clinical-assertion-trait-set))})
 
-        trait-ids-types {:release_date                    :string
+        trait-ids-types {:release_date :string
                          :clinical_assertion_trait_set_id :string
-                         :clinical_assertion_trait_id     :string}
-        trait-id-values-seq (map (fn [%] {:release_date                    (:release_date clinical-assertion-trait-set)
+                         :clinical_assertion_trait_id :string}
+        trait-id-values-seq (map (fn [%] {:release_date (:release_date clinical-assertion-trait-set)
                                           :clinical_assertion_trait_set_id (:id clinical-assertion-trait-set)
-                                          :clinical_assertion_trait_id     %})
+                                          :clinical_assertion_trait_id %})
                                  (:clinical_assertion_trait_ids clinical-assertion-trait-set))
         ]
     (assert-insert {:table-name "clinical_assertion_trait_set"
-                    :type-map   types
-                    :value-map  values})
+                    :type-map types
+                    :value-map values})
     (doseq [v trait-id-values-seq]
       (assert-insert {:table-name "clinical_assertion_trait_set_clinical_assertion_trait_ids"
-                      :type-map   trait-ids-types
-                      :value-map  v}))))
+                      :type-map trait-ids-types
+                      :value-map v}))))
 
 (defn store-clinical-assertion-trait
   [clinical-assertion-trait]
-  (let [types {:release_date    :string
-               :dirty           :int
-               :event_type      :string
+  (let [types {:release_date :string
+               :dirty :int
+               :event_type :string
 
-               :id              :string
-               :type            :string
-               :name            :string
-               :medgen_id       :string
-               :trait_id        :int
-               :content         :string
-               :xrefs           :string
+               :id :string
+               :type :string
+               :name :string
+               :medgen_id :string
+               :trait_id :int
+               :content :string
+               :xrefs :string
                :alternate_names :string}
         values (merge (select-keys clinical-assertion-trait (keys types))
-                      {:dirty           1
-                       :xrefs           (json/generate-string (:xrefs clinical-assertion-trait))
+                      {:dirty 1
+                       :xrefs (json/generate-string (:xrefs clinical-assertion-trait))
                        :alternate_names (json/generate-string (:alternate_names clinical-assertion-trait))})]
     (assert-insert {:table-name "clinical_assertion_trait"
-                    :type-map   types
-                    :value-map  values})))
+                    :type-map types
+                    :value-map values})))
 
 (defn store-gene
   [gene]
   (let [types {:release_date :string
-               :dirty        :int
-               :event_type   :string
+               :dirty :int
+               :event_type :string
 
-               :id           :int
-               :hgnc_id      :string
-               :symbol       :string
-               :full_name    :string}
+               :id :int
+               :hgnc_id :string
+               :symbol :string
+               :full_name :string}
         values (merge gene {:dirty 1})]
     (assert-insert {:table-name "gene"
-                    :type-map   types
-                    :value-map  values})))
+                    :type-map types
+                    :value-map values})))
 
 (defn store-variation
   [variation]
-  (let [types {:release_date     :string
-               :dirty            :int
-               :event_type       :string
+  (let [types {:release_date :string
+               :dirty :int
+               :event_type :string
 
-               :id               :string
-               :name             :string
-               :variation_type   :string
-               :subclass_type    :string
-               :allele_id        :string
+               :id :string
+               :name :string
+               :variation_type :string
+               :subclass_type :string
+               :allele_id :string
                :number_of_copies :int
-               :content          :string
+               :content :string
 
-               :protein_changes  :string
-               :child_ids        :string
-               :descendant_ids   :string}
+               :protein_changes :string
+               :child_ids :string
+               :descendant_ids :string}
         values (merge (select-keys variation (keys types))
-                      {:dirty           1
+                      {:dirty 1
                        :protein_changes (json/generate-string (:protein_changes variation))
-                       :child_ids       (json/generate-string (:child_ids variation))
-                       :descendant_ids  (json/generate-string (:descendant_ids variation))})]
+                       :child_ids (json/generate-string (:child_ids variation))
+                       :descendant_ids (json/generate-string (:descendant_ids variation))})]
     (assert-insert {:table-name "variation"
-                    :type-map   types
-                    :value-map  values})))
+                    :type-map types
+                    :value-map values})))
 
 (defn store-gene-association
   [gene-association]
-  (let [types {:release_date      :string
-               :dirty             :int
-               :event_type        :string
+  (let [types {:release_date :string
+               :dirty :int
+               :event_type :string
 
                :relationship_type :string
-               :source            :string
-               :content           :string
-               :variation_id      :int
-               :gene_id           :int}
+               :source :string
+               :content :string
+               :variation_id :int
+               :gene_id :int}
         values (merge gene-association {:dirty 1})]
     (assert-insert {:table-name "gene_association"
-                    :type-map   types
-                    :value-map  values})))
+                    :type-map types
+                    :value-map values})))
 
 (defn store-variation-archive
   [variation-archive]
-  (let [types {:release_date               :string
-               :dirty                      :int
-               :event_type                 :string
+  (let [types {:release_date :string
+               :dirty :int
+               :event_type :string
 
-               :id                         :string
-               :version                    :int
-               :variation_id               :int
-               :date_created               :string
-               :date_last_updated          :string
-               :num_submissions            :int
-               :num_submitters             :int
-               :record_status              :string
-               :review_status              :string
-               :species                    :string
+               :id :string
+               :version :int
+               :variation_id :int
+               :date_created :string
+               :date_last_updated :string
+               :num_submissions :int
+               :num_submitters :int
+               :record_status :string
+               :review_status :string
+               :species :string
                :interp_date_last_evaluated :string
-               :interp_type                :string
-               :interp_description         :string
-               :interp_explanation         :string
-               :interp_content             :string
-               :content                    :string}
+               :interp_type :string
+               :interp_description :string
+               :interp_explanation :string
+               :interp_content :string
+               :content :string}
         values (merge variation-archive {:dirty 1})]
     (assert-insert {:table-name "variation_archive"
-                    :type-map   types
-                    :value-map  values})))
+                    :type-map types
+                    :value-map values})))
 
 (defn store-rcv-accession
   [rcv-accession]
-  (let [types {:release_date         :string
-               :dirty                :int
-               :event_type           :string
+  (let [types {:release_date :string
+               :dirty :int
+               :event_type :string
 
-               :id                   :string
-               :version              :int
-               :title                :text
-               :date_last_evaluated  :string
-               :review_status        :string
-               :interpretation       :string
-               :submission_count     :int
+               :id :string
+               :version :int
+               :title :text
+               :date_last_evaluated :string
+               :review_status :string
+               :interpretation :string
+               :submission_count :int
                :variation_archive_id :string
-               :variation_id         :int
-               :trait_set_id         :int}
+               :variation_id :int
+               :trait_set_id :int}
         values (merge rcv-accession {:dirty 1})]
     (assert-insert {:table-name "rcv_accession"
-                    :type-map   types
-                    :value-map  values})))
+                    :type-map types
+                    :value-map values})))
 
 (defn store-clinical-assertion
   [clinical-assertion]
-  (let [types {:release_date                       :string
-               :dirty                              :int
-               :event_type                         :string
+  (let [types {:release_date :string
+               :dirty :int
+               :event_type :string
 
-               :id                                 :string
-               :version                            :int
-               :internal_id                        :int
-               :title                              :string
-               :local_key                          :string
-               :assertion_type                     :string
-               :date_created                       :string
-               :date_last_updated                  :string
-               :submitted_assembly                 :string
-               :review_status                      :string
-               :interpretation_description         :string
+               :id :string
+               :version :int
+               :internal_id :int
+               :title :string
+               :local_key :string
+               :assertion_type :string
+               :date_created :string
+               :date_last_updated :string
+               :submitted_assembly :string
+               :review_status :string
+               :interpretation_description :string
                :interpretation_date_last_evaluated :string
-               :variation_archive_id               :string
-               :variation_id                       :int
-               :submitter_id                       :int
-               :submission_id                      :string
-               :rcv_accession_id                   :string
-               :trait_set_id                       :int
-               :clinical_assertion_trait_set_id    :string
-               :content                            :string
+               :variation_archive_id :string
+               :variation_id :int
+               :submitter_id :int
+               :submission_id :string
+               :rcv_accession_id :string
+               :trait_set_id :int
+               :clinical_assertion_trait_set_id :string
+               :content :string
 
-               :interpretation_comments            :string
-               :submission_names                   :string
+               :interpretation_comments :string
+               :submission_names :string
                :clinical_assertion_observation_ids :string}
         values (merge (select-keys clinical-assertion (keys types))
-                      {:dirty                              1
-                       :interpretation_comments            (json/generate-string (:interpretation_comments clinical-assertion))
-                       :submission_names                   (json/generate-string (:submission_names clinical-assertion))
+                      {:dirty 1
+                       :interpretation_comments (json/generate-string (:interpretation_comments clinical-assertion))
+                       :submission_names (json/generate-string (:submission_names clinical-assertion))
                        :clinical_assertion_observation_ids (json/generate-string
                                                              (:clinical_assertion_observation_ids clinical-assertion))})
 
-        obs-types {:release_date          :string
+        obs-types {:release_date :string
                    :clinical_assertion_id :string
-                   :observation_id        :string}
-        obs-values-seq (map (fn [%] {:release_date          (:release_date clinical-assertion)
+                   :observation_id :string}
+        obs-values-seq (map (fn [%] {:release_date (:release_date clinical-assertion)
                                      :clinical_assertion_id (:id clinical-assertion)
-                                     :observation_id        %})
+                                     :observation_id %})
                             (:clinical_assertion_observation_ids clinical-assertion))]
     ;(println (json/generate-string values))
     (assert-insert {:table-name "clinical_assertion"
-                    :type-map   types
-                    :value-map  values})
+                    :type-map types
+                    :value-map values})
     (doseq [v obs-values-seq]
       (assert-insert {:table-name "clinical_assertion_observation_ids"
-                      :type-map   obs-types
-                      :value-map  v}))))
+                      :type-map obs-types
+                      :value-map v}))))
 
 (defn store-clinical-assertion-observation
   [observation]
-  (let [types {:release_date                    :string
-               :dirty                           :int
-               :event_type                      :string
+  (let [types {:release_date :string
+               :dirty :int
+               :event_type :string
 
-               :id                              :string
+               :id :string
                :clinical_assertion_trait_set_id :string
-               :content                         :string}
+               :content :string}
         values (merge observation {:dirty 1})]
     (assert-insert {:table-name "clinical_assertion_observation"
-                    :type-map   types
-                    :value-map  values})))
+                    :type-map types
+                    :value-map values})))
 
 (defn store-trait-mapping
   [trait-mapping]
-  (let [types {:release_date          :string
-               :dirty                 :int
-               :event_type            :string
+  (let [types {:release_date :string
+               :dirty :int
+               :event_type :string
 
                :clinical_assertion_id :string
-               :trait_type            :string
-               :mapping_type          :string
-               :mapping_value         :string
-               :mapping_ref           :string
-               :medgen_id             :string
-               :medgen_name           :string}
+               :trait_type :string
+               :mapping_type :string
+               :mapping_value :string
+               :mapping_ref :string
+               :medgen_id :string
+               :medgen_name :string}
         values (merge trait-mapping {:dirty 1})]
     (assert-insert {:table-name "trait_mapping"
-                    :type-map   types
-                    :value-map  values})))
+                    :type-map types
+                    :value-map values})))
 
 (defn store-clinical-assertion-variation
   [variation]
-  (let [types {:release_date          :string
-               :dirty                 :int
-               :event_type            :string
+  (let [types {:release_date :string
+               :dirty :int
+               :event_type :string
 
-               :id                    :string
-               :variation_type        :string
-               :subclass_type         :string
+               :id :string
+               :variation_type :string
+               :subclass_type :string
                :clinical_assertion_id :string
-               :content               :string
+               :content :string
 
-               :child_ids             :string
-               :descendant_ids        :string}
+               :child_ids :string
+               :descendant_ids :string}
         values (merge variation
-                      {:dirty          1
-                       :child_ids      (json/generate-string (:child_ids variation))
+                      {:dirty 1
+                       :child_ids (json/generate-string (:child_ids variation))
                        :descendant_ids (json/generate-string (:descendant_ids variation))})
-        desc-types {:release_date                               :string
-                    :clinical_assertion_variation_id            :string
+        desc-types {:release_date :string
+                    :clinical_assertion_variation_id :string
                     :clinical_assertion_variation_descendant_id :string}
         desc-values-seq (map
-                          (fn [%] {:release_date                               (:release_date variation)
-                                   :clinical_assertion_variation_id            (:id variation)
+                          (fn [%] {:release_date (:release_date variation)
+                                   :clinical_assertion_variation_id (:id variation)
                                    :clinical_assertion_variation_descendant_id %})
                           (:descendant_ids variation))]
     (assert-insert {:table-name "clinical_assertion_variation"
-                    :type-map   types
-                    :value-map  values})
+                    :type-map types
+                    :value-map values})
     (doseq [v desc-values-seq]
       (assert-insert {:table-name "clinical_assertion_variation_descendant_ids"
-                      :type-map   desc-types
-                      :value-map  v}))
+                      :type-map desc-types
+                      :value-map v}))
     ))
 
 
 (defn store-release-sentinel
   [sentinel]
-  (let [types {:release_date  :string
-               :dirty         :int
-               :event_type    :string
+  (let [types {:release_date :string
+               :dirty :int
+               :event_type :string
 
                :sentinel_type :string
-               :source        :string
-               :reason        :string
-               :notes         :string
+               :source :string
+               :reason :string
+               :notes :string
 
-               :rules         :string}
+               :rules :string}
         values (merge sentinel
                       {:dirty 1
                        :rules (json/generate-string (:rules sentinel))})]
     (assert-insert {:table-name "release_sentinels"
-                    :type-map   types
-                    :value-map  values})))
+                    :type-map types
+                    :value-map values})))
 
 (defn flatten-kafka-message
   [msg]
@@ -655,8 +655,10 @@
                 (map #(assoc % :entity_type "variation_archive") (get-simple "variation_archive"))
                 (map #(assoc % :entity_type "rcv_accession") (get-simple "rcv_accession"))))))
 
+
 (defn dirty-bubble-scv
-  "Propagates dirtiness of record A to record B which when aggregated contains A"
+  "Propagates dirtiness of record A to record B which when aggregated contains A, up
+  to clinical_assertion. Only includes records truly 'owned' by the assertion."
   [release-sentinel]
   ; clinical_assertion_trait -> clinical_assertion_trait_set -> clinical_assertion_observation
   (log/info "bubbling dirty sub-records for release-sentinel: " release-sentinel)
@@ -857,11 +859,11 @@
     (log/infof "Got %d total dirty trait mappings" (count trait-mappings))
     (log/infof "Got %d total dirty variations" (count variations))
 
-    (let [dirty-clinical-assertions (ca-fn {:release-date      release-date
-                                            :observations      observations
-                                            :ca-trait-sets     trait-sets
+    (let [dirty-clinical-assertions (ca-fn {:release-date release-date
+                                            :observations observations
+                                            :ca-trait-sets trait-sets
                                             :ca-trait-mappings trait-mappings
-                                            :ca-variations     variations})]
+                                            :ca-variations variations})]
       dirty-clinical-assertions)))
 
 ; TODO
@@ -877,8 +879,16 @@
 ;  - if delete, replace with deleted: true and deleted_date: {release_date}"
 ;  [record])
 
+
+(defn post-process-bubbled-scv
+  "Perform clean up operations and value reconciliation to the output of build-clinical-assertion records.
+  Values like release dates and event types need to be reconciled between the top and nested objects."
+  [assertion]
+  ())
+
 (defn build-clinical-assertion
-  "Takes a clinical assertion datified record as returned by sink/dirty-bubble"
+  "Takes a clinical assertion datified record as returned by sink/dirty-bubble, and
+  attaches all sub-records regardless of dirty status."
   [clinical-assertion]
   ; For the clinical assertion record val, combine all linked entities
   (log/debug "building clinical assertion" (:id clinical-assertion))
@@ -890,14 +900,28 @@
                                            "and ts.release_date = (select max(release_date) "
                                            "                       from clinical_assertion_trait_set "
                                            "                       where id = ts.id)")]
+                              (log/debug sql)
                               (assoc observation :clinical_assertion_trait_set
                                                  (query @db-client/db [sql (:clinical_assertion_trait_set_id observation)]))))
           traitset-trait-fn (fn [trait-set]
+                              (log/debug "looking for traits for trait set" (json/generate-string trait-set))
                               (let [sql (str "select t.* from clinical_assertion_trait_set_clinical_assertion_trait_ids tsti "
                                              "left join "
-                                             "where t.id = ?")]
-                                (assoc trait-set :clinical_assertion_traits
-                                                 (query @db-client/db [sql (:clinical_assertion_trait_set_id trait-set)]))))
+                                             "  (select * from clinical_assertion_trait t "
+                                             "   where t.release_date = (select max(release_date) "
+                                             "                           from clinical_assertion_trait where id = t.id)"
+                                             "   ) t "
+                                             "on t.id = tsti.clinical_assertion_trait_id "
+                                             "where tsti.clinical_assertion_trait_set_id = ? "
+                                             "and tsti.release_date = (select max(release_date) "
+                                             "                         from clinical_assertion_trait_set_clinical_assertion_trait_ids "
+                                             "                         where clinical_assertion_trait_set_id = tsti.clinical_assertion_trait_set_id "
+                                             "                         and clinical_assertion_trait_id = tsti.clinical_assertion_trait_id) ")]
+                                (log/debug sql)
+                                (let [updated-trait-set (assoc trait-set :clinical_assertion_traits
+                                                                         (query @db-client/db [sql (:id trait-set)]))]
+                                  (log/debug "updated trait set" (json/generate-string updated-trait-set))
+                                  updated-trait-set)))
 
           clinical-assertion
           (assoc clinical-assertion
@@ -910,15 +934,23 @@
                            "  ) o "
                            "on o.id = oi.observation_id "
                            "where oi.clinical_assertion_id = ? "
-                           "and oi.release_date = ?")]
+                           "and oi.release_date = (select max(release_date) "
+                           "                       from clinical_assertion_observation_ids "
+                           "                       where clinical_assertion_id = oi.clinical_assertion_id "
+                           "                       and observation_id = oi.observation_id)")]
               (log/debug sql)
               ; Update observations with trait sets
               ; Update trait sets with traits
-              (map (fn [observation]
-                     (assoc observation :clinical_assertion_trait_set
-                                        (map #(traitset-trait-fn %)
-                                             (:clinical_assertion_trait_set observation))))
-                   (query @db-client/db [sql scv-id release-date]))))
+              (let [observations (query @db-client/db [sql scv-id])
+                    ; add :clinical_assertion_trait_set to each
+                    observations-with-ts (map #(obs-traitset-fn %) observations)]
+                ; update each :clinical_assertion_trait_set obj to also have :clinical_assertion_traits
+                (map (fn [observation]
+                       (let [updated-trait-sets (map #(traitset-trait-fn %)
+                                                     (:clinical_assertion_trait_set observation))]
+                         (log/debug "updated trait sets" (json/generate-string updated-trait-sets))
+                         (assoc observation :clinical_assertion_trait_set updated-trait-sets)))
+                     observations-with-ts))))
 
 
           clinical-assertion
