@@ -141,17 +141,20 @@
   (let [consumer (jc/consumer (kafka-config app-config))
         producer (jc/producer (kafka-config app-config))
         topic-name (get-in topic-metadata [:input :topic-name])
-        continue (atom true)]
+        continue (atom true)
+        poll-interval-millis 5000]
     (println (:input topic-metadata))
     (log/info "Subscribing to topic" topic-name)
     (jc/subscribe consumer [(:input topic-metadata)])
-    (jc/poll consumer 0)
+
     (log/info "Seeking to beginning of input topic")
     ;(jc/seek-to-beginning-eager consumer)
+    (jc/poll consumer 0)
     (jc/seek consumer (TopicPartition. topic-name 0) 0)
+
     (log/info "Polling for messages")
     (while @continue
-      (let [msgs (jc/poll consumer (Duration/ofMillis 5000))]
+      (let [msgs (jc/poll consumer (Duration/ofMillis poll-interval-millis))]
         (log/info "Poll loop")
         (doseq [msg msgs]
           (log/info msg)
@@ -188,7 +191,6 @@
                           (jc/produce! producer (:output topic-metadata) built-clinical-assertion-json)
                           )))
 
-
                     ; Temporary stop condition for testing data subset
                     ; {:event_type "create", :release_date "2019-07-01", :content {:entity_type "release_sentinel", :clingen_version 0, :sentinel_type "end", :release_tag "clinvar-2019-07-01", :rules [], :source "clinvar", :reason "ClinVar Upstream Release 2019-07-01", :notes nil}}
                     ;(if true
@@ -199,5 +201,4 @@
                     ;        (reset! continue false))))
                     )
                   )                                         ; end if end sentinel
-
                 ))))))))
