@@ -1,6 +1,6 @@
 (ns clinvar-streams.storage.database-sqlite.client
   (:require [clojure.java.io :as io]
-            [clojure.java.jdbc :refer :all]
+            [clojure.java.jdbc :as jdbc]
             [clojure.java.shell :refer :all]
             [taoensso.timbre :as log])
   (:import [java.io File]
@@ -25,7 +25,7 @@
               :subprotocol  "sqlite"
               :subname      db-path
               :foreign_keys "on"})                          ; foreign_keys=on sets PRAGMA foreign_keys=on
-  (let [conn (get-connection @db)]
+  (let [conn (jdbc/get-connection @db)]
     (.close conn)))
 
 (defn init!
@@ -37,6 +37,12 @@
     (if (not= 0 (:exit sh-ret))
       (do (log/error (ex-info "Failed to run initialize.sql" sh-ret))
           (throw (ex-info "Failed to run initialize.sql" sh-ret))))))
+
+;(defn query [[sql & args]]
+;  (jdbc/query @db (cons sql args)))
+;
+;(defn execute! [[sql & args]]
+;  (jdbc/execute! @db (cons sql args)))
 
 (defn select
   [^PreparedStatement prepared-statement]
