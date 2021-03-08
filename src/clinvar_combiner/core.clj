@@ -7,6 +7,7 @@
             [cheshire.core :as json]
             [taoensso.timbre :as log]
             [clojure.java.io :as io]
+            [clojure.java.jdbc :as jdbc]
             [clojure.string :as s]
             [jackdaw.client :as jc])
   (:import [org.apache.kafka.streams KafkaStreams]
@@ -23,15 +24,15 @@
 
 (def topic-metadata
   {:input
-   {
-    ;:topic-name "clinvar-raw"
-    :topic-name         "clinvar-raw-testdata_20210122"
+   {;:topic-name "clinvar-raw"
+    :topic-name         "clinvar-raw-testdata_20210302"
     :partition-count    1
     :replication-factor 3
     :key-serde          (j-serde/string-serde)
     :value-serde        (j-serde/string-serde)}
    :output
-   {:topic-name         "clinvar-combined-testdata_20210122"
+   {;:topic-name         "clinvar-combined"
+    :topic-name         "clinvar-combined-testdata_20210302"
     :partition-count    1
     :replication-factor 3
     :key-serde          (j-serde/string-serde)
@@ -67,7 +68,7 @@
 (defn is-release-sentinel
   "Return true if the message is a release sentinel
   otherwise return nil"
-  [[key v]]
+  [[^String key ^String v]]
   ;  (log/debug "in select-clinical-assertion " key (get-in (json/parse-string v true) [:content :entity_type]))
   (= "release_sentinel" (get-in (json/parse-string v true) [:content :entity_type])))
 
@@ -149,7 +150,7 @@
 
     (log/info "Seeking to beginning of input topic")
     ;(jc/seek-to-beginning-eager consumer)
-    (jc/poll consumer 0)
+    (jc/poll consumer (Duration/ofSeconds 5))
     (jc/seek consumer (TopicPartition. topic-name 0) 0)
 
     (log/info "Polling for messages")
@@ -179,7 +180,12 @@
                       (log/infof "Received %d messages to flush" (count scvs-to-flush))
                       (doseq [clinical-assertion scvs-to-flush]
                         (let [built-clinical-assertion (sink/build-clinical-assertion clinical-assertion)
+                              built-clinical-assertion (sink/post-process-built-scv built-clinical-assertion)
                               built-clinical-assertion-json (json/generate-string built-clinical-assertion)]
+                          (assert (not (nil? (:id built-clinical-assertion)))
+                                  (str "assertion :id cannot be nil: " built-clinical-assertion-json))
+                          (assert (not (nil? (:release_date built-clinical-assertion)))
+                                  (str "assertion :release_date cannot be nil: " built-clinical-assertion-json))
                           (let [fpath (format "debug/SCV/%s/%s.json"
                                               (:release_date built-clinical-assertion)
                                               (:id built-clinical-assertion))]
@@ -199,6 +205,36 @@
                     ;           (= "end" (get-in release-sentinel [:content :sentinel_type])))
                     ;    (do (log/info "Stopping loop")
                     ;        (reset! continue false))))
+
+
+                    ; Mark entire database as clean. Look into whether this is the best way to do this.
+                    ; If failure occurs part-way through processing one release's batch of messages, the
+                    ; part sent will be sent again. Should be okay.
+                    (let [tables-to-clean [
+                                  "release_sentinels"
+                                  "submitter"
+                                  "submission"
+                                  "trait"
+                                  "trait_set"
+                                  "clinical_assertion_trait_set"
+                                  ;"clinical_assertion_trait_set_clinical_assertion_trait_ids"
+                                  "clinical_assertion_trait"
+                                  "gene"
+                                  "variation"
+                                  "gene_association"
+                                  "variation_archive"
+                                  "rcv_accession"
+                                  "clinical_assertion"
+                                  "clinical_assertion_observation"
+                                  ;"clinical_assertion_observation_ids"
+                                  "clinical_assertion_variation"
+                                  ;"clinical_assertion_variation_descendant_ids"
+                                  "trait_mapping"
+                                  ]]
+                      (doseq [table-name tables-to-clean]
+                        (let [updated-count (jdbc/execute! @db-client/db [(format "update %s set dirty = 0 where dirty = 1" table-name)])]
+
+                          (log/infof "Marked %s records in table %s as clean" updated-count table-name))))
                     )
                   )                                         ; end if end sentinel
                 ))))))))

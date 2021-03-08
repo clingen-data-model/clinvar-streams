@@ -658,11 +658,14 @@
 
 (defn dirty-bubble-scv
   "Propagates dirtiness of record A to record B which when aggregated contains A, up
-  to clinical_assertion. Only includes records truly 'owned' by the assertion."
+  to clinical_assertion. Only includes records truly 'owned' by the assertion.
+
+  NOTE: this function does not modify any dirty bits. Calling again will return the same results."
   [release-sentinel]
   ; clinical_assertion_trait -> clinical_assertion_trait_set -> clinical_assertion_observation
   (log/info "bubbling dirty sub-records for release-sentinel: " release-sentinel)
   (let [release-date (get release-sentinel :release_date)
+        _ (log/info "release_date: " (str release-date))
         traits-fn (fn [release-date]
                     (let [query-str (str "select * from clinical_assertion_trait t "
                                          " where t.release_date = ? "
@@ -864,6 +867,7 @@
                                             :ca-trait-sets trait-sets
                                             :ca-trait-mappings trait-mappings
                                             :ca-variations variations})]
+
       dirty-clinical-assertions)))
 
 ; TODO
@@ -879,12 +883,46 @@
 ;  - if delete, replace with deleted: true and deleted_date: {release_date}"
 ;  [record])
 
+(defn simplify-dollar-map [m]
+  "Return (get m :$) if m is map and :$ is the only key"
+  (if (and (map? m)
+           (= '(:$) (keys m)))
+    (:$ m)
+    m))
 
-(defn post-process-bubbled-scv
+(defn as-vec-if-not [val]
+  (if (and (not (string? val))
+           ; seq? should only return true for things that are themselves seqs, not all seqable
+           (seq? val))
+    val [val]))
+
+(defn post-process-built-scv
   "Perform clean up operations and value reconciliation to the output of build-clinical-assertion records.
-  Values like release dates and event types need to be reconciled between the top and nested objects."
+  Values like release dates and event types need to be reconciled between the top and nested objects.
+
+  Observations allele origin and collection method are parsed and pulled to containing scope"
   [assertion]
-  ())
+  (log/debug "Post processing scv: " (json/generate-string assertion))
+  (let [observations (:clinical_assertion_observations assertion)
+        with-parsed-content (map (fn [observation]
+                                   ;[observation (json/parse-string (:content observation) true)]
+                                   (assoc observation :parsed_content (json/parse-string (:content observation) true)))
+                                 observations)
+        with-method-type (map (fn [observation]
+                                (let [methods (as-vec-if-not (get-in observation [:parsed_content :Method]))
+                                      method-types (filter #(not (nil? %)) (map #(:MethodType %) methods))
+                                      method-types (map #(simplify-dollar-map %) method-types)]
+                                  (assoc observation :method_types method-types)))
+                              with-parsed-content)
+        with-allele-origin (map (fn [observation]
+                                  (let [samples (as-vec-if-not (get-in observation [:parsed_content :Sample]))
+                                        sample-origins (filter #(not (nil? %)) (map #(:Origin %) samples))
+                                        sample-origins (map #(simplify-dollar-map %) sample-origins)]
+                                    (assoc observation :allele_origins sample-origins)))
+                                with-method-type)]
+    (assoc assertion :clinical_assertion_observations
+                     (map #(dissoc % :parsed_content) with-allele-origin)
+                     )))
 
 (defn build-clinical-assertion
   "Takes a clinical assertion datified record as returned by sink/dirty-bubble, and
