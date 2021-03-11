@@ -900,29 +900,47 @@
   "Perform clean up operations and value reconciliation to the output of build-clinical-assertion records.
   Values like release dates and event types need to be reconciled between the top and nested objects.
 
-  Observations allele origin and collection method are parsed and pulled to containing scope"
+  Observations allele origin and collection method are parsed and pulled to top level assertion"
   [assertion]
   (log/debug "Post processing scv: " (json/generate-string assertion))
   (let [observations (:clinical_assertion_observations assertion)
-        with-parsed-content (map (fn [observation]
-                                   ;[observation (json/parse-string (:content observation) true)]
-                                   (assoc observation :parsed_content (json/parse-string (:content observation) true)))
-                                 observations)
-        with-method-type (map (fn [observation]
-                                (let [methods (as-vec-if-not (get-in observation [:parsed_content :Method]))
-                                      method-types (filter #(not (nil? %)) (map #(:MethodType %) methods))
-                                      method-types (map #(simplify-dollar-map %) method-types)]
-                                  (assoc observation :method_types method-types)))
-                              with-parsed-content)
-        with-allele-origin (map (fn [observation]
-                                  (let [samples (as-vec-if-not (get-in observation [:parsed_content :Sample]))
-                                        sample-origins (filter #(not (nil? %)) (map #(:Origin %) samples))
-                                        sample-origins (map #(simplify-dollar-map %) sample-origins)]
-                                    (assoc observation :allele_origins sample-origins)))
-                                with-method-type)]
-    (assoc assertion :clinical_assertion_observations
-                     (map #(dissoc % :parsed_content) with-allele-origin)
-                     )))
+        observations (map (fn [observation]
+                            (assoc observation :parsed_content (json/parse-string (:content observation) true)))
+                          observations)
+        ;with-method-type (map (fn [observation]
+        ;                        (let [methods (as-vec-if-not (get-in observation [:parsed_content :Method]))
+        ;                              method-types (filter #(not (nil? %)) (map #(:MethodType %) methods))
+        ;                              method-types (map #(simplify-dollar-map %) method-types)]
+        ;                          (assoc observation :method_types method-types)))
+        ;                      with-parsed-content)
+        ;with-allele-origin (map (fn [observation]
+        ;                          (let [samples (as-vec-if-not (get-in observation [:parsed_content :Sample]))
+        ;                                sample-origins (filter #(not (nil? %)) (map #(:Origin %) samples))
+        ;                                sample-origins (map #(simplify-dollar-map %) sample-origins)]
+        ;                            (assoc observation :allele_origins sample-origins)))
+        ;                        with-method-type)
+        log-fn (fn [v] (log/info (into [] v)) v)
+        method-types (->> observations
+                          (map #(get-in % [:parsed_content :Method]))
+                          (map #(as-vec-if-not %))
+                          (flatten)
+                          (map #(:MethodType %))
+                          (filter #(not (nil? %)))
+                          (map #(simplify-dollar-map %))
+                          (distinct)
+                          )
+        allele-origins (->> observations
+                            (map #(get-in % [:parsed_content :Sample]))
+                            (map #(as-vec-if-not %))
+                            (flatten)
+                            (map #(:Origin %))
+                            (filter #(not (nil? %)))
+                            (map #(simplify-dollar-map %))
+                            (distinct)
+                            )
+        ]
+    (assoc assertion :collection_methods method-types
+                     :allele_origins allele-origins)))
 
 (defn build-clinical-assertion
   "Takes a clinical assertion datified record as returned by sink/dirty-bubble, and
