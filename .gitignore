@@ -10,3 +10,9 @@ pom.xml.asc
 /.nrepl-port
 .hgignore
 .hg/
+
+
+# generated files
+/*.topic
+/*.gz
+/*.sqlite3
