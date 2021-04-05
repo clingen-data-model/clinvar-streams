@@ -1,6 +1,6 @@
 (ns clinvar-streams.storage.database-sqlite.sink
   (:require [clinvar-streams.storage.database-sqlite.client :as db-client]
-            [clinvar-streams.util :refer :all]
+            [clinvar-streams.util :refer [in? obj-max]]
             [cheshire.core :as json]
             [clojure.java.jdbc :refer :all]
             [clojure.string :as s]
@@ -612,7 +612,7 @@
       (recur (rest todo)
              (set/union output (into #{} (first todo)))))))
 
-(defn mark-dirtiness
+(defn- mark-dirtiness
   "where-ands should be a seq of triples [['id' '=' 'scv200'] ['id' '=' 'scv1']]
 
   Returns the number of records updated
@@ -637,10 +637,64 @@
   (let [release-date (:release_date release-sentinel)
         get-simple (fn [table-name]
                      (let [s (format "select * from %s where dirty = 1 and release_date = ?" table-name)
-                           u (format "update %s set dirty = 0 where release_date = ?" table-name)
+                           ;u (format "update %s set dirty = 0 where release_date = ?" table-name)
                            rs (query @db-client/db [s release-date])]
                        ;(execute! @db-client/db [u release-date])
-                       rs))]
+                       rs))
+        get-variation (fn []
+                        (let [s (str "select v.* from variation v
+                                where release_date = ? and
+                                (dirty = 1 or
+                                 exists (
+                                   select * from gene_association ga
+                                   where ga.dirty = 1 and ga.variation_id = v.id))")
+                              dirty-variations (query @db-client/db [s release-date])
+                              _ (log/infof "Got %d dirty variations" (count dirty-variations))
+                              ; Add the latest gene_association entries for this variant
+                              ; if a gene association has been deleted most recently, don't include it
+                              dirty-variations
+                              (map (fn [variation]
+                                     (let [gene-association-sql (str "select * from gene_association ga "
+                                                                     "where ga.variation_id = ? "
+                                                                     "and ga.release_date = "
+                                                                     " (select max(release_date) "
+                                                                     "  from gene_association "
+                                                                     "  where event_type <> 'delete' and "
+                                                                     "  variation_id = ga.variation_id "
+                                                                     "  and gene_id = ga.gene_id)")
+                                           gene-associations (query @db-client/db
+                                                                    [gene-association-sql
+                                                                     (:id variation)])]
+                                       (assoc variation :gene_associations
+                                                        (if (not (nil? gene-associations))
+                                                          gene-associations
+                                                          []))))
+                                   dirty-variations)]
+                          ; Set top level release date to max and remove from gene associations
+                          (map (fn [variation]
+                                 (let [max-release-date (reduce obj-max
+                                                                (concat
+                                                                  [(:release_date variation)]
+                                                                  (map #(:release_date %)
+                                                                       (:gene_associations variation))))]
+                                   (-> variation
+                                       (assoc :release_date max-release-date)
+                                       ; If a gene association was deleted and the variation is not deleted
+                                       ; mark the variation as "update".
+                                       ; If the variation was deleted, still pass it on with the new state
+                                       ; of the gene associations, but keeping the variation marked deleted.
+                                       ((fn [variation]
+                                          (let [was-gene-association-deleted
+                                                (some #(= "delete" %) (map #(:event_type %)
+                                                                           (:gene_associations variation)))]
+                                            (if (and was-gene-association-deleted
+                                                     (not= "delete" (:event_type variation)))
+                                              (assoc variation :event_type "update")
+                                              variation))))
+                                       (assoc :gene_associations (map #(dissoc % :release_date :event_type)
+                                                                      (:gene_associations variation))))))
+                               dirty-variations)
+                          ))]
     (map
       (fn [rec] (if (= "delete" (:event_type rec))
                   (assoc rec :deleted true)
@@ -650,8 +704,7 @@
                 (map #(assoc % :entity_type "trait") (get-simple "trait"))
                 (map #(assoc % :entity_type "trait_set") (get-simple "trait_set"))
                 (map #(assoc % :entity_type "gene") (get-simple "gene"))
-                (map #(assoc % :entity_type "variation") (get-simple "variation"))
-                (map #(assoc % :entity_type "gene_association") (get-simple "gene_association"))
+                (map #(assoc % :entity_type "variation") (get-variation)) ; Special case
                 (map #(assoc % :entity_type "variation_archive") (get-simple "variation_archive"))
                 (map #(assoc % :entity_type "rcv_accession") (get-simple "rcv_accession"))))))
 
