@@ -53,15 +53,17 @@
         out))))
 
 (defn obj-max
-  "max function but using Object.compareTo. vals must be homogeneous types."
+  "max function but using Object.compareTo. vals must be homogeneous types.
+  nils are ignored."
   [& vals]
   (if (or (nil? vals) (= 0 (count vals))) nil)
-  (loop [max-val (first vals)
-         to-check (rest vals)]
-    (if (empty? to-check)
-      max-val
-      (recur
-        (if (< 0 (.compareTo (first to-check) max-val))
-          (first to-check)
-          max-val)
-        (rest to-check)))))
+  (let [vals (filter #(not= nil %) vals)]
+    (loop [max-val (first vals)
+          to-check (rest vals)]
+     (if (empty? to-check)
+       max-val
+       (recur
+         (if (< 0 (.compareTo (first to-check) max-val))
+           (first to-check)
+           max-val)
+         (rest to-check))))))
