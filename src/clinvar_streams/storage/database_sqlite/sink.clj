@@ -659,9 +659,9 @@
                                                                      "and ga.release_date = "
                                                                      " (select max(release_date) "
                                                                      "  from gene_association "
-                                                                     "  where event_type <> 'delete' and "
-                                                                     "  variation_id = ga.variation_id "
-                                                                     "  and gene_id = ga.gene_id)")
+                                                                     "  where variation_id = ga.variation_id "
+                                                                     "  and gene_id = ga.gene_id) "
+                                                                     "and event_type <> 'delete'")
                                            gene-associations (query @db-client/db
                                                                     [gene-association-sql
                                                                      (:id variation)])]
@@ -704,7 +704,7 @@
                 (map #(assoc % :entity_type "trait") (get-simple "trait"))
                 (map #(assoc % :entity_type "trait_set") (get-simple "trait_set"))
                 (map #(assoc % :entity_type "gene") (get-simple "gene"))
-                (map #(assoc % :entity_type "variation") (get-variation)) ; Special case
+                (map #(assoc % :entity_type "variation") (get-variation)) ; Special case for gene_association
                 (map #(assoc % :entity_type "variation_archive") (get-simple "variation_archive"))
                 (map #(assoc % :entity_type "rcv_accession") (get-simple "rcv_accession"))))))
 
