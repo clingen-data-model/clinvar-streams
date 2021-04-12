@@ -23,15 +23,17 @@
   (not (in? e col)))
 
 (defn match-in?
-  "Returns true if any e in col matches pattern"
+  "Returns true if any e in col contains pattern"
   [pattern col]
   (some? (some #(re-find (re-pattern pattern) %) col)))
 
-(defn match-not-in? [pattern col]
+(defn match-not-in?
+  "Returns true if no e in col contain the pattern"
+  [pattern col]
   (not (match-in? pattern col)))
 
 (defn match-every?
-  "Returns true if all e in col matches pattern"
+  "Returns true if all e in col contains pattern"
   [pattern col]
   (every? #(re-find (re-pattern pattern) %) col))
 
@@ -41,6 +43,7 @@
   (= (sort col1) (sort col2)))
 
 (defn chan-get-available!
+  "Returns the values currently available in the chan. Does not block."
   [from-channel]
   (loop [ch from-channel
          out []]
@@ -48,3 +51,19 @@
       (if (not (nil? m))
         (recur ch (conj out m))
         out))))
+
+(defn obj-max
+  "max function but using Object.compareTo. vals must be homogeneous types.
+  nils are ignored."
+  [& vals]
+  (if (or (nil? vals) (= 0 (count vals))) nil)
+  (let [vals (filter #(not= nil %) vals)]
+    (loop [max-val (first vals)
+          to-check (rest vals)]
+     (if (empty? to-check)
+       max-val
+       (recur
+         (if (< 0 (.compareTo (first to-check) max-val))
+           (first to-check)
+           max-val)
+         (rest to-check))))))
