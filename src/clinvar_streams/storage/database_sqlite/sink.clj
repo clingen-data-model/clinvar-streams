@@ -604,6 +604,7 @@
 
 
 (defn set-union-all
+  "Return the set union of all of the provided cols."
   [& cols]
   (loop [todo cols
          output #{}]
@@ -650,8 +651,8 @@
                                    where ga.dirty = 1 and ga.variation_id = v.id))")
                               dirty-variations (query @db-client/db [s release-date])
                               _ (log/infof "Got %d dirty variations" (count dirty-variations))
-                              ; Add the latest gene_association entries for this variant
-                              ; if a gene association has been deleted most recently, don't include it
+                              ; Add the latest gene_association entries for this variant.
+                              ; If a gene association's most recent event is a deletion, don't include it.
                               dirty-variations
                               (map (fn [variation]
                                      (let [gene-association-sql (str "select * from gene_association ga "
@@ -672,11 +673,9 @@
                                    dirty-variations)]
                           ; Set top level release date to max and remove from gene associations
                           (map (fn [variation]
-                                 (let [max-release-date (reduce obj-max
-                                                                (concat
-                                                                  [(:release_date variation)]
-                                                                  (map #(:release_date %)
-                                                                       (:gene_associations variation))))]
+                                 (let [max-release-date (apply obj-max
+                                                               (concat [(:release_date variation)]
+                                                                       (map #(:release_date %) (:gene_associations variation))))]
                                    (-> variation
                                        (assoc :release_date max-release-date)
                                        ; If a gene association was deleted and the variation is not deleted
@@ -691,14 +690,16 @@
                                                      (not= "delete" (:event_type variation)))
                                               (assoc variation :event_type "update")
                                               variation))))
-                                       (assoc :gene_associations (map #(dissoc % :release_date :event_type)
+                                       (assoc :gene_associations (map #(dissoc % :release_date :event_type :dirty)
                                                                       (:gene_associations variation))))))
                                dirty-variations)
                           ))]
     (map
-      (fn [rec] (if (= "delete" (:event_type rec))
-                  (assoc rec :deleted true)
-                  rec))
+      ; If record was event_type=delete set deleted=true. Remove event_type.
+      (fn [rec] (dissoc (if (= "delete" (:event_type rec))
+                          (assoc rec :deleted true)
+                          rec)
+                        :event_type))
       (lazy-cat (map #(assoc % :entity_type "submitter") (get-simple "submitter"))
                 (map #(assoc % :entity_type "submission") (get-simple "submission"))
                 (map #(assoc % :entity_type "trait") (get-simple "trait"))
@@ -712,6 +713,8 @@
 (defn dirty-bubble-scv
   "Propagates dirtiness of record A to record B which when aggregated contains A, up
   to clinical_assertion. Only includes records truly 'owned' by the assertion.
+
+  Returns seq of the dirty SCVs regardless of why it was determined to be dirty.
 
   NOTE: this function does not modify any dirty bits. Calling again will return the same results."
   [release-sentinel]
@@ -923,55 +926,33 @@
 
       dirty-clinical-assertions)))
 
-; TODO
-;(defn clinical-assertion-unify-metadata
-;  "Takes a map `record` and removes columns used for internal metadata from sub-records.
-;  These are: dirty, event_type, release_date.
-;
-;  Collects all release dates from the record and sub-records and sets the top level
-;  release_date to the max.
-;
-;  It also replaces event_type at top level with:
-;  - if create, remove key
-;  - if delete, replace with deleted: true and deleted_date: {release_date}"
-;  [record])
 
 (defn simplify-dollar-map [m]
-  "Return (get m :$) if m is map and :$ is the only key"
+  "Return (get m :$) if m is a map and :$ is the only key. Otherwise return m."
   (if (and (map? m)
            (= '(:$) (keys m)))
     (:$ m)
     m))
 
 (defn as-vec-if-not [val]
+  "If val is not a seq, return it in a vector."
   (if (and (not (string? val))
            ; seq? should only return true for things that are themselves seqs, not all seqable
            (seq? val))
     val [val]))
 
-(defn post-process-built-scv
+(defn post-process-built-clinical-assertion
   "Perform clean up operations and value reconciliation to the output of build-clinical-assertion records.
   Values like release dates and event types need to be reconciled between the top and nested objects.
 
   Observations allele origin and collection method are parsed and pulled to top level assertion"
   [assertion]
   (log/debug "Post processing scv: " (json/generate-string assertion))
+  (log/debug "Adding collection methods and allele origins")
   (let [observations (:clinical_assertion_observations assertion)
         observations (map (fn [observation]
                             (assoc observation :parsed_content (json/parse-string (:content observation) true)))
                           observations)
-        ;with-method-type (map (fn [observation]
-        ;                        (let [methods (as-vec-if-not (get-in observation [:parsed_content :Method]))
-        ;                              method-types (filter #(not (nil? %)) (map #(:MethodType %) methods))
-        ;                              method-types (map #(simplify-dollar-map %) method-types)]
-        ;                          (assoc observation :method_types method-types)))
-        ;                      with-parsed-content)
-        ;with-allele-origin (map (fn [observation]
-        ;                          (let [samples (as-vec-if-not (get-in observation [:parsed_content :Sample]))
-        ;                                sample-origins (filter #(not (nil? %)) (map #(:Origin %) samples))
-        ;                                sample-origins (map #(simplify-dollar-map %) sample-origins)]
-        ;                            (assoc observation :allele_origins sample-origins)))
-        ;                        with-method-type)
         log-fn (fn [v] (log/info (into [] v)) v)
         method-types (->> observations
                           (map #(get-in % [:parsed_content :Method]))
@@ -980,8 +961,7 @@
                           (map #(:MethodType %))
                           (filter #(not (nil? %)))
                           (map #(simplify-dollar-map %))
-                          (distinct)
-                          )
+                          (distinct))
         allele-origins (->> observations
                             (map #(get-in % [:parsed_content :Sample]))
                             (map #(as-vec-if-not %))
@@ -989,14 +969,30 @@
                             (map #(:Origin %))
                             (filter #(not (nil? %)))
                             (map #(simplify-dollar-map %))
-                            (distinct)
-                            )
-        ]
+                            (distinct))]
     (assoc assertion :collection_methods method-types
-                     :allele_origins allele-origins)))
+                     :allele_origins allele-origins))
+
+  (log/debug "Bubbling up max release date to top level")
+  (let [release-dates (filterv #(not (nil? %))
+                               (concat [(:release_date assertion)]
+                                       (map #(:release_date %) (:clinical_assertion_observations assertion))
+                                       (map #(:release_date %) (:clinical_assertion_variations assertion))))
+        max-release-date (apply obj-max release-dates)]
+    (log/debugf "Assertion record release dates: %s , max is %s" (json/generate-string release-dates) max-release-date)
+    (-> assertion
+        (assoc :release_date max-release-date)
+        (assoc :clinical_assertion_observations (map #(dissoc % :release_date :dirty :event_type) ; TODO
+                                                     (:clinical_assertion_observations assertion)))
+        (assoc :clinical_assertion_variations (map #(dissoc % :release_date :dirty :event_type)
+                                                   (:clinical_assertion_variations assertion)))
+        (assoc :entity_type "clinical_assertion")
+
+        ((fn [a] (if (= "delete" (:event_type a)) (assoc a :deleted true) a)))
+        (dissoc :event_type))))
 
 (defn build-clinical-assertion
-  "Takes a clinical assertion datified record as returned by sink/dirty-bubble, and
+  "Takes a clinical assertion datified record as returned by sink/dirty-bubble-scv, and
   attaches all sub-records regardless of dirty status."
   [clinical-assertion]
   ; For the clinical assertion record val, combine all linked entities
@@ -1073,7 +1069,7 @@
                                       (query @db-client/db [sql scv-id])))
 
           ; Process some internal fields
-          clinical-assertion (assoc clinical-assertion :entity_type "clinical_assertion")
+          ;clinical-assertion (assoc clinical-assertion :entity_type "clinical_assertion")
 
           clinical-assertion
           (assoc clinical-assertion :submission_names
