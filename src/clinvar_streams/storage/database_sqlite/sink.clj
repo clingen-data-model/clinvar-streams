@@ -942,10 +942,8 @@
     val [val]))
 
 (defn post-process-built-clinical-assertion
-  "Perform clean up operations and value reconciliation to the output of build-clinical-assertion records.
-  Values like release dates and event types need to be reconciled between the top and nested objects.
-
-  Observations allele origin and collection method are parsed and pulled to top level assertion"
+  "Perform clean up operations, field value parsing, and version reconciliation on
+  the output of build-clinical-assertion records. This should almost always be called."
   [assertion]
   (log/debug "Post processing scv: " (json/generate-string assertion))
   (log/debug "Adding collection methods and allele origins")
@@ -982,14 +980,17 @@
     (log/debugf "Assertion record release dates: %s , max is %s" (json/generate-string release-dates) max-release-date)
     (-> assertion
         (assoc :release_date max-release-date)
+        ; Remove :release_date, :dirty, :event_type from sub-records
         (assoc :clinical_assertion_observations (map #(dissoc % :release_date :dirty :event_type) ; TODO
                                                      (:clinical_assertion_observations assertion)))
         (assoc :clinical_assertion_variations (map #(dissoc % :release_date :dirty :event_type)
                                                    (:clinical_assertion_variations assertion)))
+        ; Set entity_type used by downstream processors
         (assoc :entity_type "clinical_assertion")
-
+        ; If assertion event is delete, set deleted
         ((fn [a] (if (= "delete" (:event_type a)) (assoc a :deleted true) a)))
-        (dissoc :event_type))))
+        ; Remove internal fields from assertion
+        (dissoc :event_type :dirty))))
 
 (defn build-clinical-assertion
   "Takes a clinical assertion datified record as returned by sink/dirty-bubble-scv, and

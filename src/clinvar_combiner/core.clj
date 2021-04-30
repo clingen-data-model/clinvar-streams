@@ -180,7 +180,7 @@
                       (log/infof "Received %d messages to flush" (count scvs-to-flush))
                       (doseq [clinical-assertion scvs-to-flush]
                         (let [built-clinical-assertion (sink/build-clinical-assertion clinical-assertion)
-                              built-clinical-assertion (sink/post-process-built-scv built-clinical-assertion)
+                              built-clinical-assertion (sink/post-process-built-clinical-assertion built-clinical-assertion)
                               built-clinical-assertion-json (json/generate-string built-clinical-assertion)]
                           (assert (not (nil? (:id built-clinical-assertion)))
                                   (str "assertion :id cannot be nil: " built-clinical-assertion-json))
