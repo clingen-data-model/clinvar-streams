@@ -975,13 +975,35 @@
   (let [release-dates (filterv #(not (nil? %))
                                (concat [(:release_date assertion)]
                                        (map #(:release_date %) (:clinical_assertion_observations assertion))
-                                       (map #(:release_date %) (:clinical_assertion_variations assertion))))
+                                       (map #(:release_date %) (:clinical_assertion_variations assertion))
+                                       ;:clinical_assertion_trait_set
+                                       (map #(:release_date %)
+                                            (flatten
+                                              (map #(:clinical_assertion_trait_set %) ; vec
+                                                   (:clinical_assertion_observations assertion))))
+                                       ;:clinical_assertion_traits
+                                       (map (fn [t] (:release_date t))
+                                            (flatten
+                                              (map (fn [ts] (:clinical_assertion_traits ts))
+                                                   (flatten
+                                                     (map (fn [o] (:clinical_assertion_trait_set o)) ; vec
+                                                          (:clinical_assertion_observations assertion))))))
+                                       )
+                               )
         max-release-date (apply obj-max release-dates)]
     (log/debugf "Assertion record release dates: %s , max is %s" (json/generate-string release-dates) max-release-date)
     (-> assertion
         (assoc :release_date max-release-date)
         ; Remove :release_date, :dirty, :event_type from sub-records
-        (assoc :clinical_assertion_observations (map #(dissoc % :release_date :dirty :event_type) ; TODO
+        (assoc :clinical_assertion_observations (map #(-> %
+                                                          (dissoc :release_date :dirty :event_type)
+                                                          (assoc :clinical_assertion_trait_set
+                                                                 (-> (:clinical_assertion_trait_set %)
+                                                                     (dissoc :release_date :dirty :event_type)
+                                                                     ((fn [ts]
+                                                                        (assoc ts :clinical_assertion_traits
+                                                                                  (map (fn [t] (dissoc t :release_date :dirty :event_type))
+                                                                                       (:clinical_assertion_traits ts))))))))
                                                      (:clinical_assertion_observations assertion)))
         (assoc :clinical_assertion_variations (map #(dissoc % :release_date :dirty :event_type)
                                                    (:clinical_assertion_variations assertion)))
@@ -1007,8 +1029,11 @@
                                            "                       from clinical_assertion_trait_set "
                                            "                       where id = ts.id)")]
                               (log/debug sql)
-                              (assoc observation :clinical_assertion_trait_set
-                                                 (query @db-client/db [sql (:clinical_assertion_trait_set_id observation)]))))
+                              (let [rs (query @db-client/db [sql (:clinical_assertion_trait_set_id observation)])]
+                                (if (< 1 (count rs))
+                                  (throw (ex-info "Trait set query for observation returned more than one result"
+                                                  {:observation observation :sql sql :trait_sets rs})))
+                                (assoc observation :clinical_assertion_trait_set (first rs)))))
           traitset-trait-fn (fn [trait-set]
                               (log/debug "looking for traits for trait set" (json/generate-string trait-set))
                               (let [sql (str "select t.* from clinical_assertion_trait_set_clinical_assertion_trait_ids tsti "
@@ -1052,10 +1077,9 @@
                     observations-with-ts (map #(obs-traitset-fn %) observations)]
                 ; update each :clinical_assertion_trait_set obj to also have :clinical_assertion_traits
                 (map (fn [observation]
-                       (let [updated-trait-sets (map #(traitset-trait-fn %)
-                                                     (:clinical_assertion_trait_set observation))]
-                         (log/debug "updated trait sets" (json/generate-string updated-trait-sets))
-                         (assoc observation :clinical_assertion_trait_set updated-trait-sets)))
+                       (let [trait-set-with-traits (traitset-trait-fn (:clinical_assertion_trait_set observation))]
+                         (log/debug "updated trait sets" (json/generate-string trait-set-with-traits))
+                         (assoc observation :clinical_assertion_trait_set trait-set-with-traits)))
                      observations-with-ts))))
 
 
