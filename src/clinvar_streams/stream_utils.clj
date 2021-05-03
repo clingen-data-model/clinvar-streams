@@ -55,3 +55,7 @@
               (recur (concat msgs batch)
                      (+ c (count batch)))
               )))))))
+; TODO
+(defn topic-exists? [topic-name]
+  "TODO"
+  (let [consumer ()]))
