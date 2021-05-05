@@ -16,46 +16,46 @@
            (org.apache.kafka.common TopicPartition))
   (:gen-class))
 
-(def app-config {:kafka-host     "pkc-4yyd6.us-east1.gcp.confluent.cloud:9092"
-                 :kafka-user     (util/get-env-required "KAFKA_USER")
+(def app-config {:kafka-host "pkc-4yyd6.us-east1.gcp.confluent.cloud:9092"
+                 :kafka-user (util/get-env-required "KAFKA_USER")
                  :kafka-password (util/get-env-required "KAFKA_PASSWORD")
-                 :kafka-group    (util/get-env-required "KAFKA_GROUP")
+                 :kafka-group (util/get-env-required "KAFKA_GROUP")
                  })
 
 (def topic-metadata
   {:input
    {;:topic-name "clinvar-raw"
-    :topic-name         "clinvar-raw-testdata_20210302"
-    :partition-count    1
+    :topic-name "clinvar-raw-testdata_20210302"
+    :partition-count 1
     :replication-factor 3
-    :key-serde          (j-serde/string-serde)
-    :value-serde        (j-serde/string-serde)}
+    :key-serde (j-serde/string-serde)
+    :value-serde (j-serde/string-serde)}
    :output
    {;:topic-name         "clinvar-combined"
-    :topic-name         "clinvar-combined-testdata_20210302"
-    :partition-count    1
+    :topic-name "clinvar-combined-testdata_20210302"
+    :partition-count 1
     :replication-factor 3
-    :key-serde          (j-serde/string-serde)
-    :value-serde        (j-serde/string-serde)}})
+    :key-serde (j-serde/string-serde)
+    :value-serde (j-serde/string-serde)}})
 
 (defn kafka-config
   "Expects, at a minimum, :kafka-user and :kafka-password in opts. "
   [opts]
   {"ssl.endpoint.identification.algorithm" "https"
-   "compression.type"                      "gzip"
-   "sasl.mechanism"                        "PLAIN"
-   "request.timeout.ms"                    "20000"
-   "application.id"                        (:kafka-group opts)
-   "group.id"                              (:kafka-group opts)
-   "bootstrap.servers"                     (:kafka-host opts)
-   "retry.backoff.ms"                      "500"
-   "security.protocol"                     "SASL_SSL"
-   "key.serializer"                        "org.apache.kafka.common.serialization.StringSerializer"
-   "value.serializer"                      "org.apache.kafka.common.serialization.StringSerializer"
-   "key.deserializer"                      "org.apache.kafka.common.serialization.StringDeserializer"
-   "value.deserializer"                    "org.apache.kafka.common.serialization.StringDeserializer"
-   "sasl.jaas.config"                      (str "org.apache.kafka.common.security.plain.PlainLoginModule required username=\""
-                                                (:kafka-user opts) "\" password=\"" (:kafka-password opts) "\";")})
+   "compression.type" "gzip"
+   "sasl.mechanism" "PLAIN"
+   "request.timeout.ms" "20000"
+   "application.id" (:kafka-group opts)
+   "group.id" (:kafka-group opts)
+   "bootstrap.servers" (:kafka-host opts)
+   "retry.backoff.ms" "500"
+   "security.protocol" "SASL_SSL"
+   "key.serializer" "org.apache.kafka.common.serialization.StringSerializer"
+   "value.serializer" "org.apache.kafka.common.serialization.StringSerializer"
+   "key.deserializer" "org.apache.kafka.common.serialization.StringDeserializer"
+   "value.deserializer" "org.apache.kafka.common.serialization.StringDeserializer"
+   "sasl.jaas.config" (str "org.apache.kafka.common.security.plain.PlainLoginModule required username=\""
+                           (:kafka-user opts) "\" password=\"" (:kafka-password opts) "\";")})
 
 
 (defn select-clinical-assertion
@@ -163,78 +163,85 @@
                 kv [k v]]
             (to-db kv)
             (if (is-release-sentinel kv)
-              (let [release-sentinel (json/parse-string (second kv) true)]
-                (if (= "end" (get-in release-sentinel [:content :sentinel_type]))
-                  ; Flush non-SCVs
-                  ; records-to-flush is lazy, avoid realizing it
-                  (do
-                    (doseq [record (sink/get-dirty release-sentinel)]
-                      (let [record-json (json/generate-string record)]
-                        (log/info record-json)
-                        (jc/produce! producer (:output topic-metadata) record-json)))
+              (let [release-sentinel (json/parse-string (second kv) true)
+                    sentinel-type (get-in release-sentinel [:content :sentinel_type])]
+                (cond (= "start" sentinel-type)
+                      (do (let [record-json (json/generate-string release-sentinel)]
+                            (log/info "Got start sentinel" record-json)
+                            (jc/produce! producer (:output topic-metadata) record-json)))
+
+                      (= "end" sentinel-type)
+                      ; Flush non-SCVs
+                      ; records-to-flush is lazy, avoid realizing it
+                      (do
+                        (doseq [record (sink/get-dirty release-sentinel)]
+                          (let [record-json (json/generate-string record)]
+                            (log/info record-json)
+                            (jc/produce! producer (:output topic-metadata) record-json)))
 
 
-                    ; Flush SCVs
-                    (let [scvs-to-flush (sink/dirty-bubble-scv release-sentinel)]
-                      (log/info release-sentinel)
-                      (log/infof "Received %d messages to flush" (count scvs-to-flush))
-                      (doseq [clinical-assertion scvs-to-flush]
-                        (let [built-clinical-assertion (sink/build-clinical-assertion clinical-assertion)
-                              built-clinical-assertion (sink/post-process-built-clinical-assertion built-clinical-assertion)
-                              built-clinical-assertion-json (json/generate-string built-clinical-assertion)]
-                          (assert (not (nil? (:id built-clinical-assertion)))
-                                  (str "assertion :id cannot be nil: " built-clinical-assertion-json))
-                          (assert (not (nil? (:release_date built-clinical-assertion)))
-                                  (str "assertion :release_date cannot be nil: " built-clinical-assertion-json))
-                          (let [fpath (format "debug/SCV/%s/%s.json"
-                                              (:release_date built-clinical-assertion)
-                                              (:id built-clinical-assertion))]
-                            (io/make-parents fpath)
-                            (with-open [fwriter (io/writer fpath)]
-                              (.write fwriter built-clinical-assertion-json)))
-                          (log/info built-clinical-assertion-json)
-                          ; Write message to output
-                          (jc/produce! producer (:output topic-metadata) built-clinical-assertion-json)
-                          )))
+                        ; Flush SCVs
+                        (let [scvs-to-flush (sink/dirty-bubble-scv release-sentinel)]
+                          (log/info release-sentinel)
+                          (log/infof "Received %d messages to flush" (count scvs-to-flush))
+                          (doseq [clinical-assertion scvs-to-flush]
+                            (let [built-clinical-assertion (sink/build-clinical-assertion clinical-assertion)
+                                  built-clinical-assertion (sink/post-process-built-clinical-assertion built-clinical-assertion)
+                                  built-clinical-assertion-json (json/generate-string built-clinical-assertion)]
+                              (assert (not (nil? (:id built-clinical-assertion)))
+                                      (str "assertion :id cannot be nil: " built-clinical-assertion-json))
+                              (assert (not (nil? (:release_date built-clinical-assertion)))
+                                      (str "assertion :release_date cannot be nil: " built-clinical-assertion-json))
+                              (let [fpath (format "debug/SCV/%s/%s.json"
+                                                  (:release_date built-clinical-assertion)
+                                                  (:id built-clinical-assertion))]
+                                (io/make-parents fpath)
+                                (with-open [fwriter (io/writer fpath)]
+                                  (.write fwriter built-clinical-assertion-json)))
+                              (log/info built-clinical-assertion-json)
+                              ; Write message to output
+                              (jc/produce! producer (:output topic-metadata) built-clinical-assertion-json)
+                              )))
 
-                    ; Temporary stop condition for testing data subset
-                    ; {:event_type "create", :release_date "2019-07-01", :content {:entity_type "release_sentinel", :clingen_version 0, :sentinel_type "end", :release_tag "clinvar-2019-07-01", :rules [], :source "clinvar", :reason "ClinVar Upstream Release 2019-07-01", :notes nil}}
-                    ;(if true
-                    ;  (if (and (= "2019-10-01" (:release_date release-sentinel))
-                    ;           ;(= "2019-07-01" (:release_date release-sentinel))
-                    ;           (= "end" (get-in release-sentinel [:content :sentinel_type])))
-                    ;    (do (log/info "Stopping loop")
-                    ;        (reset! continue false))))
+                        ; Write end release sentinel to output
+                        (let [record-json (json/generate-string release-sentinel)]
+                          (jc/produce! producer (:output topic-metadata) record-json))
 
+                        ; Temporary stop condition for testing data subset
+                        ; {:event_type "create", :release_date "2019-07-01", :content {:entity_type "release_sentinel", :clingen_version 0, :sentinel_type "end", :release_tag "clinvar-2019-07-01", :rules [], :source "clinvar", :reason "ClinVar Upstream Release 2019-07-01", :notes nil}}
+                        ;(if true
+                        ;  (if (and (= "2019-10-01" (:release_date release-sentinel))
+                        ;           ;(= "2019-07-01" (:release_date release-sentinel))
+                        ;           (= "end" (get-in release-sentinel [:content :sentinel_type])))
+                        ;    (do (log/info "Stopping loop")
+                        ;        (reset! continue false))))
 
-                    ; Mark entire database as clean. Look into whether this is the best way to do this.
-                    ; If failure occurs part-way through processing one release's batch of messages, the
-                    ; part sent will be sent again. Should be okay.
-                    (let [tables-to-clean [
-                                  "release_sentinels"
-                                  "submitter"
-                                  "submission"
-                                  "trait"
-                                  "trait_set"
-                                  "clinical_assertion_trait_set"
-                                  ;"clinical_assertion_trait_set_clinical_assertion_trait_ids"
-                                  "clinical_assertion_trait"
-                                  "gene"
-                                  "variation"
-                                  "gene_association"
-                                  "variation_archive"
-                                  "rcv_accession"
-                                  "clinical_assertion"
-                                  "clinical_assertion_observation"
-                                  ;"clinical_assertion_observation_ids"
-                                  "clinical_assertion_variation"
-                                  ;"clinical_assertion_variation_descendant_ids"
-                                  "trait_mapping"
-                                  ]]
-                      (doseq [table-name tables-to-clean]
-                        (let [updated-count (jdbc/execute! @db-client/db [(format "update %s set dirty = 0 where dirty = 1" table-name)])]
-
-                          (log/infof "Marked %s records in table %s as clean" updated-count table-name))))
-                    )
-                  )                                         ; end if end sentinel
+                        ; Mark entire database as clean. Look into whether this is the best way to do this.
+                        ; If failure occurs part-way through processing one release's batch of messages, the
+                        ; part sent will be sent again. Should be okay.
+                        (let [tables-to-clean [
+                                               "release_sentinels"
+                                               "submitter"
+                                               "submission"
+                                               "trait"
+                                               "trait_set"
+                                               "clinical_assertion_trait_set"
+                                               ;"clinical_assertion_trait_set_clinical_assertion_trait_ids"
+                                               "clinical_assertion_trait"
+                                               "gene"
+                                               "variation"
+                                               "gene_association"
+                                               "variation_archive"
+                                               "rcv_accession"
+                                               "clinical_assertion"
+                                               "clinical_assertion_observation"
+                                               ;"clinical_assertion_observation_ids"
+                                               "clinical_assertion_variation"
+                                               ;"clinical_assertion_variation_descendant_ids"
+                                               "trait_mapping"
+                                               ]]
+                          (doseq [table-name tables-to-clean]
+                            (let [updated-count (jdbc/execute! @db-client/db [(format "update %s set dirty = 0 where dirty = 1" table-name)])]
+                              (log/infof "Marked %s records in table %s as clean" updated-count table-name))))) ; end do
+                      )                                     ; end if end sentinel
                 ))))))))
