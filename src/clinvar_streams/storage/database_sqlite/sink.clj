@@ -728,7 +728,7 @@
                                          " and t.dirty = 1")
                           _ (log/debug query-str)
                           traits (query @db-client/db [query-str release-date] {:keywordize? true})]
-                      (log/infof "Got %d traits" (count traits))
+                      (log/infof "Got %d dirty traits" (count traits))
                       traits))
         trait-sets-fn (fn [release-date traits]
                         "traits is a seq of maps containing at least :id of traits"
@@ -757,7 +757,7 @@
                                        ")")                 ; end or
                                   _ (log/debug trait-set-sql)
                                   new-trait-sets (query @db-client/db [trait-set-sql release-date])]
-                              (log/infof "Got %d trait sets" (count new-trait-sets))
+                              (log/infof "Got %d dirty trait sets" (count new-trait-sets))
                               (recur
                                 (rest trait-batches)
                                 (concat trait-sets new-trait-sets))))))
@@ -776,6 +776,7 @@
                                          "           ts.release_date = (select max(release_date) "
                                          "                              from clinical_assertion_trait_set ts2 "
                                          "                              where ts2.id = ts.id)) "
+                                         "    and ts.id = o.clinical_assertion_trait_set_id "
                                          "    and ts.id in ( "
                                          (s/join "," (map #(str "'" (:id %) "'") (first trait-set-batches)))
                                          "    ) "
@@ -783,7 +784,7 @@
                                          ")")
                                     _ (log/debug observation-sql)
                                     new-observations (query @db-client/db [observation-sql release-date])]
-                                (log/infof "Got %d observations" (count new-observations))
+                                (log/infof "Got %d dirty observations" (count new-observations))
                                 (recur
                                   (rest trait-set-batches)
                                   (concat observations new-observations))))))
@@ -793,7 +794,7 @@
                                        "where release_date = ? and dirty = 1")
                                   _ (log/debug trait-mapping-sql)
                                   trait-mappings (query @db-client/db [trait-mapping-sql release-date])]
-                              (log/infof "Got %d trait mappings" (count trait-mappings))
+                              (log/infof "Got %d dirty trait mappings" (count trait-mappings))
                               trait-mappings))
         ca-variation-fn (fn [release-date]
                           (let [variation-sql
@@ -811,7 +812,7 @@
                                      ") ")
                                 _ (log/debug variation-sql)
                                 variations (query @db-client/db [variation-sql release-date])]
-                            (log/infof "Got %d variations" (count variations))
+                            (log/infof "Got %d dirty variations" (count variations))
                             variations
                             ))
         ca-fn (fn [{:keys [release-date
@@ -889,7 +890,9 @@
                                                 sql (str "select ca.* from clinical_assertion ca "
                                                          "where exists ( "
                                                          "  select * from clinical_assertion_variation v"
-                                                         "  where v.id in (" ins ")) "
+                                                         "  where v.id in (" ins ")"
+                                                         "  and v.clinical_assertion_id = ca.id"
+                                                         ") "
                                                          "and ca.release_date = (select max(release_date) "
                                                          "                       from clinical_assertion "
                                                          "                       where id = ca.id)")]
@@ -1027,7 +1030,8 @@
                                            "where ts.id = ? "
                                            "and ts.release_date = (select max(release_date) "
                                            "                       from clinical_assertion_trait_set "
-                                           "                       where id = ts.id)")]
+                                           "                       where id = ts.id) "
+                                           "and ts.event_type <> 'delete'")]
                               (log/debug sql)
                               (let [rs (query @db-client/db [sql (:clinical_assertion_trait_set_id observation)])]
                                 (if (< 1 (count rs))
@@ -1047,7 +1051,8 @@
                                              "and tsti.release_date = (select max(release_date) "
                                              "                         from clinical_assertion_trait_set_clinical_assertion_trait_ids "
                                              "                         where clinical_assertion_trait_set_id = tsti.clinical_assertion_trait_set_id "
-                                             "                         and clinical_assertion_trait_id = tsti.clinical_assertion_trait_id) ")]
+                                             "                         and clinical_assertion_trait_id = tsti.clinical_assertion_trait_id) "
+                                             "and t.event_type <> 'delete'")]
                                 (log/debug sql)
                                 (let [updated-trait-set (assoc trait-set :clinical_assertion_traits
                                                                          (query @db-client/db [sql (:id trait-set)]))]
@@ -1068,7 +1073,8 @@
                            "and oi.release_date = (select max(release_date) "
                            "                       from clinical_assertion_observation_ids "
                            "                       where clinical_assertion_id = oi.clinical_assertion_id "
-                           "                       and observation_id = oi.observation_id)")]
+                           "                       and observation_id = oi.observation_id) "
+                           "and o.event_type <> 'delete'")]
               (log/debug sql)
               ; Update observations with trait sets
               ; Update trait sets with traits
@@ -1078,10 +1084,30 @@
                 ; update each :clinical_assertion_trait_set obj to also have :clinical_assertion_traits
                 (map (fn [observation]
                        (let [trait-set-with-traits (traitset-trait-fn (:clinical_assertion_trait_set observation))]
-                         (log/debug "updated trait sets" (json/generate-string trait-set-with-traits))
+                         (log/debug "updated observation trait sets" (json/generate-string trait-set-with-traits))
                          (assoc observation :clinical_assertion_trait_set trait-set-with-traits)))
                      observations-with-ts))))
 
+          clinical-assertion
+          (assoc clinical-assertion :clinical_assertion_trait_set
+                                    ; If no trait set id, just set it null
+                                    (if (:clinical_assertion_trait_set_id clinical-assertion)
+                                      (let [sql (str "select ts.* from clinical_assertion_trait_set ts "
+                                                     "where ts.id = ? "
+                                                     "and ts.release_date = (select max(release_date) "
+                                                     "                       from clinical_assertion_trait_set "
+                                                     "                       where id = ts.id) "
+                                                     "and ts.event_type <> 'delete'")]
+                                        (log/debug sql)
+                                        (let [ts (query @db-client/db [sql (:clinical_assertion_trait_set_id clinical-assertion)])]
+                                          (if (< 1 (count ts))
+                                            (throw (ex-info "clinical_assertion->clinical_assertion_trait_set returned multiple records"
+                                                            {:trait_sets ts})))
+                                          (let [ts-with-traits (traitset-trait-fn (first ts))]
+                                            (log/debug "top level updated trait set with traits"
+                                                       (json/generate-string ts-with-traits))
+                                            ts-with-traits)
+                                          ))))
 
           clinical-assertion
           (assoc clinical-assertion :clinical_assertion_variations
@@ -1089,7 +1115,8 @@
                                                    "where v.clinical_assertion_id = ? "
                                                    "and v.release_date = (select max(release_date) "
                                                    "                      from clinical_assertion_variation "
-                                                   "                      where id = v.id)")]
+                                                   "                      where id = v.id) "
+                                                   "and v.event_type <> 'delete'")]
                                       (log/debug sql)
                                       (query @db-client/db [sql scv-id])))
 
