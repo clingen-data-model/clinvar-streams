@@ -979,43 +979,47 @@
                                (concat [(:release_date assertion)]
                                        (map #(:release_date %) (:clinical_assertion_observations assertion))
                                        (map #(:release_date %) (:clinical_assertion_variations assertion))
-                                       ;:clinical_assertion_trait_set
+                                       ;:clinical_assertion_trait_set (in observation and top level)
                                        (map #(:release_date %)
                                             (flatten
                                               (map #(:clinical_assertion_trait_set %) ; vec
-                                                   (:clinical_assertion_observations assertion))))
-                                       ;:clinical_assertion_traits
+                                                   (conj (:clinical_assertion_observations assertion)
+                                                         assertion))))
+                                       ;:clinical_assertion_traits (in observation and top level)
                                        (map (fn [t] (:release_date t))
                                             (flatten
                                               (map (fn [ts] (:clinical_assertion_traits ts))
                                                    (flatten
                                                      (map (fn [o] (:clinical_assertion_trait_set o)) ; vec
-                                                          (:clinical_assertion_observations assertion))))))
+                                                          (conj (:clinical_assertion_observations assertion)
+                                                                assertion))))))
                                        )
                                )
         max-release-date (apply obj-max release-dates)]
     (log/debugf "Assertion record release dates: %s , max is %s" (json/generate-string release-dates) max-release-date)
-    (-> assertion
-        (assoc :release_date max-release-date)
-        ; Remove :release_date, :dirty, :event_type from sub-records
-        (assoc :clinical_assertion_observations (map #(-> %
-                                                          (dissoc :release_date :dirty :event_type)
-                                                          (assoc :clinical_assertion_trait_set
-                                                                 (-> (:clinical_assertion_trait_set %)
-                                                                     (dissoc :release_date :dirty :event_type)
-                                                                     ((fn [ts]
-                                                                        (assoc ts :clinical_assertion_traits
-                                                                                  (map (fn [t] (dissoc t :release_date :dirty :event_type))
-                                                                                       (:clinical_assertion_traits ts))))))))
-                                                     (:clinical_assertion_observations assertion)))
-        (assoc :clinical_assertion_variations (map #(dissoc % :release_date :dirty :event_type)
-                                                   (:clinical_assertion_variations assertion)))
-        ; Set entity_type used by downstream processors
-        (assoc :entity_type "clinical_assertion")
-        ; If assertion event is delete, set deleted
-        ((fn [a] (if (= "delete" (:event_type a)) (assoc a :deleted true) a)))
-        ; Remove internal fields from assertion
-        (dissoc :event_type :dirty))))
+    (letfn [(clean-trait-set [trait-set]
+              (dissoc
+                (assoc trait-set :clinical_assertion_traits
+                                 (map (fn [t] (dissoc t :release_date :dirty :event_type))
+                                      (:clinical_assertion_traits trait-set)))
+                :release_date :dirty :event_type))]
+      (-> assertion
+          (assoc :release_date max-release-date)
+          ; Remove :release_date, :dirty, :event_type from sub-records
+          (assoc :clinical_assertion_trait_set (clean-trait-set (:clinical_assertion_trait_set assertion)))
+          (assoc :clinical_assertion_observations (map #(-> %
+                                                            (dissoc :release_date :dirty :event_type)
+                                                            (assoc :clinical_assertion_trait_set
+                                                                   (clean-trait-set (:clinical_assertion_trait_set %))))
+                                                       (:clinical_assertion_observations assertion)))
+          (assoc :clinical_assertion_variations (map #(dissoc % :release_date :dirty :event_type)
+                                                     (:clinical_assertion_variations assertion)))
+          ; Set entity_type used by downstream processors
+          (assoc :entity_type "clinical_assertion")
+          ; If assertion event is delete, set deleted
+          ((fn [a] (if (= "delete" (:event_type a)) (assoc a :deleted true) a)))
+          ; Remove internal fields from assertion
+          (dissoc :event_type :dirty)))))
 
 (defn build-clinical-assertion
   "Takes a clinical assertion datified record as returned by sink/dirty-bubble-scv, and
