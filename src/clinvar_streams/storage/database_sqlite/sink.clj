@@ -604,6 +604,7 @@
 
 
 (defn set-union-all
+  "Return the set union of all of the provided cols."
   [& cols]
   (loop [todo cols
          output #{}]
@@ -650,8 +651,8 @@
                                    where ga.dirty = 1 and ga.variation_id = v.id))")
                               dirty-variations (query @db-client/db [s release-date])
                               _ (log/infof "Got %d dirty variations" (count dirty-variations))
-                              ; Add the latest gene_association entries for this variant
-                              ; if a gene association has been deleted most recently, don't include it
+                              ; Add the latest gene_association entries for this variant.
+                              ; If a gene association's most recent event is a deletion, don't include it.
                               dirty-variations
                               (map (fn [variation]
                                      (let [gene-association-sql (str "select * from gene_association ga "
@@ -672,11 +673,9 @@
                                    dirty-variations)]
                           ; Set top level release date to max and remove from gene associations
                           (map (fn [variation]
-                                 (let [max-release-date (reduce obj-max
-                                                                (concat
-                                                                  [(:release_date variation)]
-                                                                  (map #(:release_date %)
-                                                                       (:gene_associations variation))))]
+                                 (let [max-release-date (apply obj-max
+                                                               (concat [(:release_date variation)]
+                                                                       (map #(:release_date %) (:gene_associations variation))))]
                                    (-> variation
                                        (assoc :release_date max-release-date)
                                        ; If a gene association was deleted and the variation is not deleted
@@ -691,14 +690,16 @@
                                                      (not= "delete" (:event_type variation)))
                                               (assoc variation :event_type "update")
                                               variation))))
-                                       (assoc :gene_associations (map #(dissoc % :release_date :event_type)
+                                       (assoc :gene_associations (map #(dissoc % :release_date :event_type :dirty)
                                                                       (:gene_associations variation))))))
                                dirty-variations)
                           ))]
     (map
-      (fn [rec] (if (= "delete" (:event_type rec))
-                  (assoc rec :deleted true)
-                  rec))
+      ; If record was event_type=delete set deleted=true. Remove event_type.
+      (fn [rec] (dissoc (if (= "delete" (:event_type rec))
+                          (assoc rec :deleted true)
+                          rec)
+                        :event_type))
       (lazy-cat (map #(assoc % :entity_type "submitter") (get-simple "submitter"))
                 (map #(assoc % :entity_type "submission") (get-simple "submission"))
                 (map #(assoc % :entity_type "trait") (get-simple "trait"))
@@ -713,6 +714,8 @@
   "Propagates dirtiness of record A to record B which when aggregated contains A, up
   to clinical_assertion. Only includes records truly 'owned' by the assertion.
 
+  Returns seq of the dirty SCVs regardless of why it was determined to be dirty.
+
   NOTE: this function does not modify any dirty bits. Calling again will return the same results."
   [release-sentinel]
   ; clinical_assertion_trait -> clinical_assertion_trait_set -> clinical_assertion_observation
@@ -725,7 +728,7 @@
                                          " and t.dirty = 1")
                           _ (log/debug query-str)
                           traits (query @db-client/db [query-str release-date] {:keywordize? true})]
-                      (log/infof "Got %d traits" (count traits))
+                      (log/infof "Got %d dirty traits" (count traits))
                       traits))
         trait-sets-fn (fn [release-date traits]
                         "traits is a seq of maps containing at least :id of traits"
@@ -754,7 +757,7 @@
                                        ")")                 ; end or
                                   _ (log/debug trait-set-sql)
                                   new-trait-sets (query @db-client/db [trait-set-sql release-date])]
-                              (log/infof "Got %d trait sets" (count new-trait-sets))
+                              (log/infof "Got %d dirty trait sets" (count new-trait-sets))
                               (recur
                                 (rest trait-batches)
                                 (concat trait-sets new-trait-sets))))))
@@ -773,6 +776,7 @@
                                          "           ts.release_date = (select max(release_date) "
                                          "                              from clinical_assertion_trait_set ts2 "
                                          "                              where ts2.id = ts.id)) "
+                                         "    and ts.id = o.clinical_assertion_trait_set_id "
                                          "    and ts.id in ( "
                                          (s/join "," (map #(str "'" (:id %) "'") (first trait-set-batches)))
                                          "    ) "
@@ -780,7 +784,7 @@
                                          ")")
                                     _ (log/debug observation-sql)
                                     new-observations (query @db-client/db [observation-sql release-date])]
-                                (log/infof "Got %d observations" (count new-observations))
+                                (log/infof "Got %d dirty observations" (count new-observations))
                                 (recur
                                   (rest trait-set-batches)
                                   (concat observations new-observations))))))
@@ -790,7 +794,7 @@
                                        "where release_date = ? and dirty = 1")
                                   _ (log/debug trait-mapping-sql)
                                   trait-mappings (query @db-client/db [trait-mapping-sql release-date])]
-                              (log/infof "Got %d trait mappings" (count trait-mappings))
+                              (log/infof "Got %d dirty trait mappings" (count trait-mappings))
                               trait-mappings))
         ca-variation-fn (fn [release-date]
                           (let [variation-sql
@@ -808,7 +812,7 @@
                                      ") ")
                                 _ (log/debug variation-sql)
                                 variations (query @db-client/db [variation-sql release-date])]
-                            (log/infof "Got %d variations" (count variations))
+                            (log/infof "Got %d dirty variations" (count variations))
                             variations
                             ))
         ca-fn (fn [{:keys [release-date
@@ -886,7 +890,9 @@
                                                 sql (str "select ca.* from clinical_assertion ca "
                                                          "where exists ( "
                                                          "  select * from clinical_assertion_variation v"
-                                                         "  where v.id in (" ins ")) "
+                                                         "  where v.id in (" ins ")"
+                                                         "  and v.clinical_assertion_id = ca.id"
+                                                         ") "
                                                          "and ca.release_date = (select max(release_date) "
                                                          "                       from clinical_assertion "
                                                          "                       where id = ca.id)")]
@@ -923,55 +929,31 @@
 
       dirty-clinical-assertions)))
 
-; TODO
-;(defn clinical-assertion-unify-metadata
-;  "Takes a map `record` and removes columns used for internal metadata from sub-records.
-;  These are: dirty, event_type, release_date.
-;
-;  Collects all release dates from the record and sub-records and sets the top level
-;  release_date to the max.
-;
-;  It also replaces event_type at top level with:
-;  - if create, remove key
-;  - if delete, replace with deleted: true and deleted_date: {release_date}"
-;  [record])
 
 (defn simplify-dollar-map [m]
-  "Return (get m :$) if m is map and :$ is the only key"
+  "Return (get m :$) if m is a map and :$ is the only key. Otherwise return m."
   (if (and (map? m)
            (= '(:$) (keys m)))
     (:$ m)
     m))
 
 (defn as-vec-if-not [val]
+  "If val is not a seq, return it in a vector."
   (if (and (not (string? val))
            ; seq? should only return true for things that are themselves seqs, not all seqable
            (seq? val))
     val [val]))
 
-(defn post-process-built-scv
-  "Perform clean up operations and value reconciliation to the output of build-clinical-assertion records.
-  Values like release dates and event types need to be reconciled between the top and nested objects.
-
-  Observations allele origin and collection method are parsed and pulled to top level assertion"
+(defn post-process-built-clinical-assertion
+  "Perform clean up operations, field value parsing, and version reconciliation on
+  the output of build-clinical-assertion records. This should almost always be called."
   [assertion]
   (log/debug "Post processing scv: " (json/generate-string assertion))
+  (log/debug "Adding collection methods and allele origins")
   (let [observations (:clinical_assertion_observations assertion)
         observations (map (fn [observation]
                             (assoc observation :parsed_content (json/parse-string (:content observation) true)))
                           observations)
-        ;with-method-type (map (fn [observation]
-        ;                        (let [methods (as-vec-if-not (get-in observation [:parsed_content :Method]))
-        ;                              method-types (filter #(not (nil? %)) (map #(:MethodType %) methods))
-        ;                              method-types (map #(simplify-dollar-map %) method-types)]
-        ;                          (assoc observation :method_types method-types)))
-        ;                      with-parsed-content)
-        ;with-allele-origin (map (fn [observation]
-        ;                          (let [samples (as-vec-if-not (get-in observation [:parsed_content :Sample]))
-        ;                                sample-origins (filter #(not (nil? %)) (map #(:Origin %) samples))
-        ;                                sample-origins (map #(simplify-dollar-map %) sample-origins)]
-        ;                            (assoc observation :allele_origins sample-origins)))
-        ;                        with-method-type)
         log-fn (fn [v] (log/info (into [] v)) v)
         method-types (->> observations
                           (map #(get-in % [:parsed_content :Method]))
@@ -980,8 +962,7 @@
                           (map #(:MethodType %))
                           (filter #(not (nil? %)))
                           (map #(simplify-dollar-map %))
-                          (distinct)
-                          )
+                          (distinct))
         allele-origins (->> observations
                             (map #(get-in % [:parsed_content :Sample]))
                             (map #(as-vec-if-not %))
@@ -989,14 +970,59 @@
                             (map #(:Origin %))
                             (filter #(not (nil? %)))
                             (map #(simplify-dollar-map %))
-                            (distinct)
-                            )
-        ]
+                            (distinct))]
     (assoc assertion :collection_methods method-types
-                     :allele_origins allele-origins)))
+                     :allele_origins allele-origins))
+
+  (log/debug "Bubbling up max release date to top level")
+  (let [release-dates (filterv #(not (nil? %))
+                               (concat [(:release_date assertion)]
+                                       (map #(:release_date %) (:clinical_assertion_observations assertion))
+                                       (map #(:release_date %) (:clinical_assertion_variations assertion))
+                                       ;:clinical_assertion_trait_set (in observation and top level)
+                                       (map #(:release_date %)
+                                            (flatten
+                                              (map #(:clinical_assertion_trait_set %) ; vec
+                                                   (conj (:clinical_assertion_observations assertion)
+                                                         assertion))))
+                                       ;:clinical_assertion_traits (in observation and top level)
+                                       (map (fn [t] (:release_date t))
+                                            (flatten
+                                              (map (fn [ts] (:clinical_assertion_traits ts))
+                                                   (flatten
+                                                     (map (fn [o] (:clinical_assertion_trait_set o)) ; vec
+                                                          (conj (:clinical_assertion_observations assertion)
+                                                                assertion))))))
+                                       )
+                               )
+        max-release-date (apply obj-max release-dates)]
+    (log/debugf "Assertion record release dates: %s , max is %s" (json/generate-string release-dates) max-release-date)
+    (letfn [(clean-trait-set [trait-set]
+              (dissoc
+                (assoc trait-set :clinical_assertion_traits
+                                 (map (fn [t] (dissoc t :release_date :dirty :event_type))
+                                      (:clinical_assertion_traits trait-set)))
+                :release_date :dirty :event_type))]
+      (-> assertion
+          (assoc :release_date max-release-date)
+          ; Remove :release_date, :dirty, :event_type from sub-records
+          (assoc :clinical_assertion_trait_set (clean-trait-set (:clinical_assertion_trait_set assertion)))
+          (assoc :clinical_assertion_observations (map #(-> %
+                                                            (dissoc :release_date :dirty :event_type)
+                                                            (assoc :clinical_assertion_trait_set
+                                                                   (clean-trait-set (:clinical_assertion_trait_set %))))
+                                                       (:clinical_assertion_observations assertion)))
+          (assoc :clinical_assertion_variations (map #(dissoc % :release_date :dirty :event_type)
+                                                     (:clinical_assertion_variations assertion)))
+          ; Set entity_type used by downstream processors
+          (assoc :entity_type "clinical_assertion")
+          ; If assertion event is delete, set deleted
+          ((fn [a] (if (= "delete" (:event_type a)) (assoc a :deleted true) a)))
+          ; Remove internal fields from assertion
+          (dissoc :event_type :dirty)))))
 
 (defn build-clinical-assertion
-  "Takes a clinical assertion datified record as returned by sink/dirty-bubble, and
+  "Takes a clinical assertion datified record as returned by sink/dirty-bubble-scv, and
   attaches all sub-records regardless of dirty status."
   [clinical-assertion]
   ; For the clinical assertion record val, combine all linked entities
@@ -1008,10 +1034,14 @@
                                            "where ts.id = ? "
                                            "and ts.release_date = (select max(release_date) "
                                            "                       from clinical_assertion_trait_set "
-                                           "                       where id = ts.id)")]
+                                           "                       where id = ts.id) "
+                                           "and ts.event_type <> 'delete'")]
                               (log/debug sql)
-                              (assoc observation :clinical_assertion_trait_set
-                                                 (query @db-client/db [sql (:clinical_assertion_trait_set_id observation)]))))
+                              (let [rs (query @db-client/db [sql (:clinical_assertion_trait_set_id observation)])]
+                                (if (< 1 (count rs))
+                                  (throw (ex-info "Trait set query for observation returned more than one result"
+                                                  {:observation observation :sql sql :trait_sets rs})))
+                                (assoc observation :clinical_assertion_trait_set (first rs)))))
           traitset-trait-fn (fn [trait-set]
                               (log/debug "looking for traits for trait set" (json/generate-string trait-set))
                               (let [sql (str "select t.* from clinical_assertion_trait_set_clinical_assertion_trait_ids tsti "
@@ -1025,7 +1055,8 @@
                                              "and tsti.release_date = (select max(release_date) "
                                              "                         from clinical_assertion_trait_set_clinical_assertion_trait_ids "
                                              "                         where clinical_assertion_trait_set_id = tsti.clinical_assertion_trait_set_id "
-                                             "                         and clinical_assertion_trait_id = tsti.clinical_assertion_trait_id) ")]
+                                             "                         and clinical_assertion_trait_id = tsti.clinical_assertion_trait_id) "
+                                             "and t.event_type <> 'delete'")]
                                 (log/debug sql)
                                 (let [updated-trait-set (assoc trait-set :clinical_assertion_traits
                                                                          (query @db-client/db [sql (:id trait-set)]))]
@@ -1046,7 +1077,8 @@
                            "and oi.release_date = (select max(release_date) "
                            "                       from clinical_assertion_observation_ids "
                            "                       where clinical_assertion_id = oi.clinical_assertion_id "
-                           "                       and observation_id = oi.observation_id)")]
+                           "                       and observation_id = oi.observation_id) "
+                           "and o.event_type <> 'delete'")]
               (log/debug sql)
               ; Update observations with trait sets
               ; Update trait sets with traits
@@ -1055,12 +1087,31 @@
                     observations-with-ts (map #(obs-traitset-fn %) observations)]
                 ; update each :clinical_assertion_trait_set obj to also have :clinical_assertion_traits
                 (map (fn [observation]
-                       (let [updated-trait-sets (map #(traitset-trait-fn %)
-                                                     (:clinical_assertion_trait_set observation))]
-                         (log/debug "updated trait sets" (json/generate-string updated-trait-sets))
-                         (assoc observation :clinical_assertion_trait_set updated-trait-sets)))
+                       (let [trait-set-with-traits (traitset-trait-fn (:clinical_assertion_trait_set observation))]
+                         (log/debug "updated observation trait sets" (json/generate-string trait-set-with-traits))
+                         (assoc observation :clinical_assertion_trait_set trait-set-with-traits)))
                      observations-with-ts))))
 
+          clinical-assertion
+          (assoc clinical-assertion :clinical_assertion_trait_set
+                                    ; If no trait set id, just set it null
+                                    (if (:clinical_assertion_trait_set_id clinical-assertion)
+                                      (let [sql (str "select ts.* from clinical_assertion_trait_set ts "
+                                                     "where ts.id = ? "
+                                                     "and ts.release_date = (select max(release_date) "
+                                                     "                       from clinical_assertion_trait_set "
+                                                     "                       where id = ts.id) "
+                                                     "and ts.event_type <> 'delete'")]
+                                        (log/debug sql)
+                                        (let [ts (query @db-client/db [sql (:clinical_assertion_trait_set_id clinical-assertion)])]
+                                          (if (< 1 (count ts))
+                                            (throw (ex-info "clinical_assertion->clinical_assertion_trait_set returned multiple records"
+                                                            {:trait_sets ts})))
+                                          (let [ts-with-traits (traitset-trait-fn (first ts))]
+                                            (log/debug "top level updated trait set with traits"
+                                                       (json/generate-string ts-with-traits))
+                                            ts-with-traits)
+                                          ))))
 
           clinical-assertion
           (assoc clinical-assertion :clinical_assertion_variations
@@ -1068,12 +1119,13 @@
                                                    "where v.clinical_assertion_id = ? "
                                                    "and v.release_date = (select max(release_date) "
                                                    "                      from clinical_assertion_variation "
-                                                   "                      where id = v.id)")]
+                                                   "                      where id = v.id) "
+                                                   "and v.event_type <> 'delete'")]
                                       (log/debug sql)
                                       (query @db-client/db [sql scv-id])))
 
           ; Process some internal fields
-          clinical-assertion (assoc clinical-assertion :entity_type "clinical_assertion")
+          ;clinical-assertion (assoc clinical-assertion :entity_type "clinical_assertion")
 
           clinical-assertion
           (assoc clinical-assertion :submission_names
