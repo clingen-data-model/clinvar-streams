@@ -944,6 +944,46 @@
            (seq? val))
     val [val]))
 
+(defn variation-list-to-compound
+  "Takes a collection of clinical assertion variations and nests the child variations (^String :child_ids)
+  under compound variations as a vector on the key :child-variations of the parent."
+  [variations]
+  (let [variations (mapv #(assoc % :child-ids-parsed (json/parse-string (:child_ids %)))
+                         variations)
+        others (filterv #(not (in? (:subclass_type %) ["Genotype" "Haplotype" "SimpleAllele"])) variations)
+        id-to-variation (into {} (map #(vector (:id %) %) variations))
+        ids-used-as-children (atom #{})]
+    (if (< 0 (count others))
+      (throw (ex-info "Found variations for assertion of unknown subclass type"
+                      {:variations variations :unknown others}))
+      (for [v variations]
+        (let [child-ids-parsed
+              (:child-ids-parsed v)
+              child-variations
+              (if (not (empty? child-ids-parsed))
+                (if (not (vector? child-ids-parsed))
+                  (throw (ex-info ":child_ids field was not a JSON array" {:cause v}))
+                  (loop [child-id child-ids-parsed]
+                    (let [child-v (get-in id-to-variation child-id)]
+                      (if (nil? child-v)
+                        (throw (ex-info "Variation referred to child variation which could not be found"
+                                        {:variation v :child-id child-id}))
+                        child-v)))
+                  ))
+              ]
+          (if (not= (count child-ids-parsed) (count child-variations))
+            (throw (ex-info (format "Number of child variations (%d) found did not match number of child ids (%d)"
+                                    (count child-variations) (count child-ids-parsed))
+                            {:variation v :child-ids child-ids-parsed :child-variations child-variations})))
+          ; Add the children of this variation to the set of variations used as children in the assertion
+          (swap! ids-used-as-children clojure.set/union (set (map #(:id %) child-variations)))
+          ; Return the variation with the children attached
+          (-> v
+              (assoc :child-variations child-variations)
+              (rename-keys {:child-ids-parsed :child_ids})))))
+    )
+  )
+
 (defn post-process-built-clinical-assertion
   "Perform clean up operations, field value parsing, and version reconciliation on
   the output of build-clinical-assertion records. This should almost always be called."
