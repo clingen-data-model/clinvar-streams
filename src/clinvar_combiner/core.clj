@@ -182,10 +182,12 @@
                             (let [built-clinical-assertion (sink/build-clinical-assertion clinical-assertion)
                                   built-clinical-assertion (sink/post-process-built-clinical-assertion built-clinical-assertion)
                                   built-clinical-assertion-json (json/generate-string built-clinical-assertion)]
-                              (assert (not (nil? (:id built-clinical-assertion)))
-                                      (str "assertion :id cannot be nil: " built-clinical-assertion-json))
-                              (assert (not (nil? (:release_date built-clinical-assertion)))
-                                      (str "assertion :release_date cannot be nil: " built-clinical-assertion-json))
+                              (if (nil? (:id built-clinical-assertion))
+                                (throw (ex-info "assertion :id cannot be nil"
+                                                {:cause built-clinical-assertion-json})))
+                              (if (nil? (:release_date built-clinical-assertion))
+                                (throw (ex-info "assertion :release_date cannot be nil"
+                                                {:cause built-clinical-assertion-json})))
                               (let [fpath (format "debug/SCV/%s/%s.json"
                                                   (:release_date built-clinical-assertion)
                                                   (:id built-clinical-assertion))]
