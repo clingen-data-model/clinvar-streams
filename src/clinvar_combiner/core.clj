@@ -133,12 +133,6 @@
   (log/set-level! :debug)
   (db-client/init! "clinvar.sqlite3")
 
-  ;(let [builder (j/streams-builder)]
-  ;  (jc/seek)
-  ;  (topology builder (:input topic-metadata) (:output topic-metadata))
-  ;  (let [app (j/kafka-streams builder (kafka-config app-config))]
-  ;    (log/info "Starting Kafka Streams app")
-  ;    (j/start app)))
   (let [consumer (jc/consumer (kafka-config app-config))
         producer (jc/producer (kafka-config app-config))
         topic-name (get-in topic-metadata [:input :topic-name])
