@@ -7,8 +7,13 @@
   "Performs System/getenv variable-name, but throws an exception if value is empty"
   [variable-name]
   (let [a (System/getenv variable-name)]
-    (if (not (empty? a)) a
-                         (ex-info (format "Environment variable %s must be provided" variable-name) {}))))
+    (if (not (empty? a))
+      a
+      (throw (ex-info (format "Environment variable %s must be provided" variable-name) {})))))
+
+(defn assoc-if
+  "Assoc k v pair to m if v is not nil"
+  [m k v] (if (not (nil? v)) (assoc m k v) m))
 
 (defn not-empty?
   [coll]
@@ -59,11 +64,11 @@
   (if (or (nil? vals) (= 0 (count vals))) nil)
   (let [vals (filter #(not= nil %) vals)]
     (loop [max-val (first vals)
-          to-check (rest vals)]
-     (if (empty? to-check)
-       max-val
-       (recur
-         (if (< 0 (.compareTo (first to-check) max-val))
-           (first to-check)
-           max-val)
-         (rest to-check))))))
+           to-check (rest vals)]
+      (if (empty? to-check)
+        max-val
+        (recur
+          (if (< 0 (.compareTo (first to-check) max-val))
+            (first to-check)
+            max-val)
+          (rest to-check))))))
