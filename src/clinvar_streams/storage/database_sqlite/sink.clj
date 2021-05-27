@@ -1,6 +1,6 @@
 (ns clinvar-streams.storage.database-sqlite.sink
   (:require [clinvar-streams.storage.database-sqlite.client :as db-client]
-            [clinvar-streams.util :refer [in? obj-max]]
+            [clinvar-streams.util :refer [in? obj-max assoc-if]]
             [cheshire.core :as json]
             [clojure.java.jdbc :refer :all]
             [clojure.string :as s]
@@ -948,39 +948,47 @@
   "Takes a collection of clinical assertion variations and nests the child variations (^String :child_ids)
   under compound variations as a vector on the key :child-variations of the parent."
   [variations]
-  (let [variations (mapv #(assoc % :child-ids-parsed (json/parse-string (:child_ids %)))
+  (let [variations (mapv (fn [v] (let [child-ids (json/parse-string (:child_ids v))]
+                                   (if (< 0 (count child-ids))
+                                     (assoc v :child_ids child-ids)
+                                     (dissoc v :child_ids))))
                          variations)
-        others (filterv #(not (in? (:subclass_type %) ["Genotype" "Haplotype" "SimpleAllele"])) variations)
+        others (filterv #(not (in? (:subclass_type %) ["Genotype" "Haplotype" "SimpleAllele"]))
+                        variations)
         id-to-variation (into {} (map #(vector (:id %) %) variations))
         ids-used-as-children (atom #{})]
     (if (< 0 (count others))
       (throw (ex-info "Found variations for assertion of unknown subclass type"
                       {:variations variations :unknown others}))
-      (for [v variations]
-        (let [child-ids-parsed
-              (:child-ids-parsed v)
-              child-variations
-              (if (not (empty? child-ids-parsed))
-                (if (not (vector? child-ids-parsed))
-                  (throw (ex-info ":child_ids field was not a JSON array" {:cause v}))
-                  (loop [child-id child-ids-parsed]
-                    (let [child-v (get-in id-to-variation child-id)]
-                      (if (nil? child-v)
-                        (throw (ex-info "Variation referred to child variation which could not be found"
-                                        {:variation v :child-id child-id}))
-                        child-v)))
-                  ))
-              ]
-          (if (not= (count child-ids-parsed) (count child-variations))
-            (throw (ex-info (format "Number of child variations (%d) found did not match number of child ids (%d)"
-                                    (count child-variations) (count child-ids-parsed))
-                            {:variation v :child-ids child-ids-parsed :child-variations child-variations})))
-          ; Add the children of this variation to the set of variations used as children in the assertion
-          (swap! ids-used-as-children clojure.set/union (set (map #(:id %) child-variations)))
-          ; Return the variation with the children attached
-          (-> v
-              (assoc :child-variations child-variations)
-              (rename-keys {:child-ids-parsed :child_ids})))))
+      (let [variations-with-children
+            (for [v (filter #(:child_ids %) variations)]
+              (let [child-ids (:child_ids v)
+                    child-variations (if (not (sequential? child-ids)) ; list or vec or seq
+                                       (throw (ex-info ":child_ids field was not a JSON array " {:cause v}))
+                                       (for [child-id child-ids]
+                                         (let [child-v (get id-to-variation child-id)]
+                                           (if (nil? child-v)
+                                             (throw (ex-info "Variation referred to child variation which could not be found"
+                                                             {:variation v :child-id child-id :variations variations}))
+                                             child-v))))]
+                (if (not= (count child-ids) (count child-variations))
+                  (throw (ex-info (format "Number of child variations (%d) found did not match number of child ids (%d)"
+                                          (count child-variations) (count child-ids))
+                                  {:variation v :child_ids child-ids :child_variations child-variations})))
+                ; Add the children of this variation to the set of variations used as children in the assertion
+                (swap! ids-used-as-children clojure.set/union (set (map #(:id %) child-variations)))
+                ; Attach the children variations to it
+                (assoc-if v :child_variations child-variations)))]
+        (if (< 1 (count variations-with-children))
+          (throw (ex-info "More than 1 root variation object in list"
+                          {:variations variations
+                           :variations-with-children variations-with-children})))
+        variations-with-children
+        ; TODO error checks to make sure all are included in either ids-used-as-children
+        ; or top level of variations-with-children
+        ; remove from variations-with-children if has parent and children
+        ; ensure the ones removed are children of those remaining after the removal
+        ))
     )
   )
 
