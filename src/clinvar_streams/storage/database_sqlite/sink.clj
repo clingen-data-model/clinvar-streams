@@ -945,16 +945,35 @@
     val [val]))
 
 (defn validate-variation-tree
+  "Returns true if validations succeed, throw exception otherwise.
+  Checks structural expectations for a variation or compound variation. Does not look at content
+  of variation aside from the type of variation, which is used to validate structural relationships."
   [variation]
-  ; TODO check subclasses
-  ;(let [others (filterv #(not (in? (:subclass_type %) ["Genotype" "Haplotype" "SimpleAllele"]))
-  ;                      variations)])
-  ;(if (< 0 (count others))
-  ;      (throw (ex-info "Found variations for assertion of unknown subclass type"
-  ;                      {:variations variations :unknown others}))
-  ; TODO check no variation appears twice
-  ; TODO check genotype->haplotype->simpleallele expected topological order
-  )
+  ; TODO check no variation appears twice (?)
+
+  ; Check genotype->haplotype->simpleallele expected topological order
+  (let [descendant-subclass-map {"Genotype" "Haplotype"
+                                 "Haplotype" "SimpleAllele"
+                                 "SimpleAllele" nil}
+        child-variations (:child_variations variation)
+        subclass (:subclass_type variation)]
+    (when (not (contains? descendant-subclass-map subclass))
+      (throw (ex-info "Variation subclass not recognized" {:variation variation})))
+
+    (if (not (= 0 (count child-variations)))
+      (if (nil? (get descendant-subclass-map subclass))
+        (throw (ex-info "Variation has children but no mapped child subclass" {:variation variation}))
+        (if (not (every? (fn [child]
+                           (if (not (= (get descendant-subclass-map subclass) (:subclass_type child)))
+                             (throw (ex-info "Variation child did not match expected type"
+                                             {:variation variation
+                                              :subclass_type subclass
+                                              :child_subclass_type (:subclass_type child)
+                                              :expected_child_subclass_type (get descendant-subclass-map subclass)})))
+                           (validate-variation-tree child))
+                         child-variations))
+          (throw (ex-info "Variation has invalid child variation(s)" {:variation variation})))))
+    true))
 
 (defn variation-list-to-compound
   "Takes a collection of clinical assertion variations and nests the child variations (^String :child_ids)
@@ -962,59 +981,56 @@
   [variations]
   (let [variations (filter #(not (nil? %)) variations)]
     (if (= 0 (count variations))
-     nil
-     (let [variations (mapv (fn [v] (let [child-ids (into [] (json/parse-string (:child_ids v)))]
-                                      (if (< 0 (count child-ids))
-                                        (assoc v :child_ids child-ids)
-                                        (dissoc v :child_ids))))
-                            (mapv #(assoc % :parent_ids []) variations))
-           id-to-variation (atom (into {} (map #(vector (:id %) %) variations)))]
+      nil
+      (let [variations (mapv (fn [v] (let [child-ids (into [] (json/parse-string (:child_ids v)))]
+                                       (if (< 0 (count child-ids))
+                                         (assoc v :child_ids child-ids)
+                                         (dissoc v :child_ids))))
+                             (mapv #(assoc % :parent_ids []) variations))
+            id-to-variation (atom (into {} (map #(vector (:id %) %) variations)))]
 
-       ; Add reverse relations from children to parents
-       (doseq [[id v] (into {} @id-to-variation)]           ; Copy value of id-to-variation, not sure if necessary
-         (when-let [child-ids (:child_ids v)]
-           (log/debug "Updating child variations of " (:id v) (into [] child-ids))
-           (doseq [child-id child-ids]
-             ; Update child variation to have current id in its parent_ids vector
-             (do (log/debugf "Adding variation id %s as parent of %s" id child-id)
-                 (swap! id-to-variation (fn [old]
-                                          (let [child-variation (get old child-id)]
-                                            (assoc old child-id (assoc child-variation :parent_ids
-                                                                                       (conj (:parent_ids child-variation)
-                                                                                             id))))))))))
-       ; Remove empty parent_ids vectors
-       (reset! id-to-variation (into {} (map (fn [[k v]]
-                                               [k (if (= 0 (count (:parent_ids v)))
-                                                    (dissoc v :parent_ids) v)])
-                                             @id-to-variation)))
+        ; Add reverse relations from children to parents
+        (doseq [[id v] (into {} @id-to-variation)]          ; Copy value of id-to-variation, not sure if necessary
+          (when-let [child-ids (:child_ids v)]
+            (log/debug "Updating child variations of " (:id v) (into [] child-ids))
+            (doseq [child-id child-ids]
+              ; Update child variation to have current id in its parent_ids vector
+              (do (log/debugf "Adding variation id %s as parent of %s" id child-id)
+                  (swap! id-to-variation (fn [old]
+                                           (let [child-variation (get old child-id)]
+                                             (assoc old child-id (assoc child-variation :parent_ids
+                                                                                        (conj (:parent_ids child-variation)
+                                                                                              id))))))))))
+        ; Remove empty parent_ids vectors
+        (reset! id-to-variation (into {} (map (fn [[k v]]
+                                                [k (if (= 0 (count (:parent_ids v)))
+                                                     (dissoc v :parent_ids) v)])
+                                              @id-to-variation)))
 
-       (log/info "id-to-variation: " @id-to-variation)
+        (log/debug "id-to-variation: " @id-to-variation)
 
-       ; Root variation is the one with no parent_ids field (was removed above)
-       (let [root (into {} (filter #(nil? (:parent_ids (second %))) @id-to-variation))]
-         (if (not= 1 (count root))
-           (throw (ex-info "Could not determine root variation in variation list"
-                           {:id-to-variation @id-to-variation}))
-           (let [[root-id root-variation] (first root)]
-             (letfn [(add-children-fn [variation]
-                       (log/infof "variation: %s child_ids: %s" (:id variation) (:child_ids variation))
-                       (let [child-ids (:child_ids variation)]
-                         (if child-ids
-                           (let [child-variations (mapv #(get @id-to-variation %) child-ids)
-                                 child-variations (mapv #(dissoc % :parent_ids) child-variations)]
-                             (log/info "child-variations: " child-variations)
-                             (if (some #(= nil %) child-variations)
-                               (throw (ex-info (format "Variation referred to child id not found")
-                                               {:child-ids child-ids :ids (keys @id-to-variation)}))
-                               (let [recursed-child-variations (mapv #(if (:child_ids %) (add-children-fn %) %)
-                                                                     child-variations)]
-                                 (assoc variation :child_variations recursed-child-variations))))
-                           variation)))]
-               (log/info "Adding children to root variation recursively")
-               (add-children-fn root-variation)
-               ))))
-       )))
-  )
+        ; Root variation is the one with no parent_ids field (was removed above)
+        (let [root (into {} (filter #(nil? (:parent_ids (second %))) @id-to-variation))]
+          (if (not= 1 (count root))
+            (throw (ex-info "Could not determine root variation in variation list"
+                            {:id-to-variation @id-to-variation}))
+            (let [[root-id root-variation] (first root)]
+              (letfn [(add-children-fn [variation]
+                        (log/debug "variation: %s child_ids: %s" (:id variation) (:child_ids variation))
+                        (let [child-ids (:child_ids variation)]
+                          (if child-ids
+                            (let [child-variations (mapv #(get @id-to-variation %) child-ids)
+                                  child-variations (mapv #(dissoc % :parent_ids) child-variations)]
+                              (log/debug "child-variations: " child-variations)
+                              (if (some #(= nil %) child-variations)
+                                (throw (ex-info (format "Variation referred to child id not found")
+                                                {:child-ids child-ids :ids (keys @id-to-variation)}))
+                                (let [recursed-child-variations (mapv #(if (:child_ids %) (add-children-fn %) %)
+                                                                      child-variations)]
+                                  (assoc variation :child_variations recursed-child-variations))))
+                            variation)))]
+                (log/info "Adding children to root variation recursively")
+                (add-children-fn root-variation)))))))))
 
 (defn post-process-built-clinical-assertion
   "Perform clean up operations, field value parsing, and version reconciliation on
