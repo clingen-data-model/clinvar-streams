@@ -952,8 +952,8 @@
   ; TODO check no variation appears twice (?)
 
   ; Check genotype->haplotype->simpleallele expected topological order
-  (let [descendant-subclass-map {"Genotype" "Haplotype"
-                                 "Haplotype" "SimpleAllele"
+  (let [descendant-subclass-map {"Genotype" ["Haplotype" "SimpleAllele"]
+                                 "Haplotype" ["SimpleAllele"]
                                  "SimpleAllele" nil}
         child-variations (:child_variations variation)
         subclass (:subclass_type variation)]
@@ -964,7 +964,7 @@
       (if (nil? (get descendant-subclass-map subclass))
         (throw (ex-info "Variation has children but no mapped child subclass" {:variation variation}))
         (if (not (every? (fn [child]
-                           (if (not (= (get descendant-subclass-map subclass) (:subclass_type child)))
+                           (if (not (in? (:subclass_type child) (get descendant-subclass-map subclass) ))
                              (throw (ex-info "Variation child did not match expected type"
                                              {:variation variation
                                               :subclass_type subclass

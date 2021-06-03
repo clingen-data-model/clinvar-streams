@@ -161,7 +161,9 @@
                      :subclass_type "Genotype"
                      :child_variations
                      [{:id "v2"
-                       :subclass_type "Haplotype"}]}
+                       :subclass_type "Haplotype"}
+                      {:id "v2"
+                       :subclass_type "SimpleAllele"}]}
           variation2 {:id "v1"
                       :subclass_type "Haplotype"
                       :child_variations
@@ -201,16 +203,9 @@
                      :subclass_type "Genotype"
                      :child_variations
                      [{:id "v1-1"
-                       :subclass_type "Genotype"}]}
-          variation2 {:id "v1"
-                      :subclass_type "Genotype"
-                      :child_variations
-                      [{:id "v1-1"
-                        :subclass_type "SimpleAllele"}]}]
+                       :subclass_type "Genotype"}]}]
       (test/is (thrown? ExceptionInfo (sink/validate-variation-tree variation))
-               (str "Expected exception: " variation))
-      (test/is (thrown? ExceptionInfo (sink/validate-variation-tree variation2))
-               (str "Expected exception: " variation2))))
+               (str "Expected exception: " variation))))
   (test/testing "Error case, invalid Haplotype child"
     (let [variation {:id "v1"
                      :subclass_type "Haplotype"
