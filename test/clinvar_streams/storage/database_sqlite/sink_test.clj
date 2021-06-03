@@ -120,6 +120,15 @@
       (test/is (thrown? ExceptionInfo
                         (sink/validate-variation-tree variation))
                (str "Expected exception: " variation))))
+  (test/testing "Error case, unrecognized nested subclass"
+    (let [variation {:id "v1"
+                     :subclass_type "Haplotype"
+                     :child_variations
+                     [{:id "v1-1"
+                       :subclass_type "fakesubclass"}]}]
+      (test/is (thrown? ExceptionInfo
+                        (sink/validate-variation-tree variation))
+               (str "Expected exception: " variation))))
 
   (test/testing "General case, one variation"
     (let [variation {:id "v1" :subclass_type "SimpleAllele"}
