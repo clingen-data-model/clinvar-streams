@@ -16,11 +16,12 @@
            (org.apache.kafka.common TopicPartition))
   (:gen-class))
 
-(def app-config {:kafka-host "pkc-4yyd6.us-east1.gcp.confluent.cloud:9092"
-                 :kafka-user (util/get-env-required "KAFKA_USER")
-                 :kafka-password (util/get-env-required "KAFKA_PASSWORD")
-                 :kafka-group (util/get-env-required "KAFKA_GROUP")
-                 })
+(defn app-config []
+  {:kafka-host "pkc-4yyd6.us-east1.gcp.confluent.cloud:9092"
+   :kafka-user (util/get-env-required "KAFKA_USER")
+   :kafka-password (util/get-env-required "KAFKA_PASSWORD")
+   :kafka-group (util/get-env-required "KAFKA_GROUP")
+   })
 
 (def topic-metadata
   {:input
@@ -129,12 +130,12 @@
 (defn -main
   "Construct topology and start kafka streams application"
   [& args]
-  (write-map-to-file (kafka-config app-config) "kafka.properties")
+  (write-map-to-file (kafka-config (app-config)) "kafka.properties")
   (log/set-level! :debug)
   (db-client/init! "clinvar.sqlite3")
 
-  (let [consumer (jc/consumer (kafka-config app-config))
-        producer (jc/producer (kafka-config app-config))
+  (let [consumer (jc/consumer (kafka-config (app-config)))
+        producer (jc/producer (kafka-config (app-config)))
         topic-name (get-in topic-metadata [:input :topic-name])
         continue (atom true)
         poll-interval-millis 5000]

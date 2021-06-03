@@ -18,27 +18,28 @@
   (:gen-class))
 
 
-(def app-config {:kafka-host "pkc-4yyd6.us-east1.gcp.confluent.cloud:9092"
-                 :kafka-user (util/get-env-required "KAFKA_USER")
-                 :kafka-password (util/get-env-required "KAFKA_PASSWORD")
-                 :kafka-group (util/get-env-required "KAFKA_GROUP")
-                 })
+(defn app-config []
+  {:kafka-host "pkc-4yyd6.us-east1.gcp.confluent.cloud:9092"
+   :kafka-user (util/get-env-required "KAFKA_USER")
+   :kafka-password (util/get-env-required "KAFKA_PASSWORD")
+   :kafka-group (util/get-env-required "KAFKA_GROUP")
+   })
 
 
 (defn get-max-offset [topic-name partition-num]
-  (let [consumer (jc/consumer (config/kafka-config (assoc app-config :kafka-group (.toString (UUID/randomUUID)))))]
+  (let [consumer (jc/consumer (config/kafka-config (assoc (app-config) :kafka-group (.toString (UUID/randomUUID)))))]
     (jc/subscribe consumer [{:topic-name topic-name}])
     (jc/seek-to-end-eager consumer)
     (jc/position consumer (TopicPartition. topic-name partition-num))))
 
 (defn get-min-offset [topic-name partition-num]
-  (let [consumer (jc/consumer (config/kafka-config (assoc app-config :kafka-group (.toString (UUID/randomUUID)))))]
+  (let [consumer (jc/consumer (config/kafka-config (assoc (app-config) :kafka-group (.toString (UUID/randomUUID)))))]
     (jc/subscribe consumer [{:topic-name topic-name}])
     (jc/seek-to-beginning-eager consumer)
     (jc/position consumer (TopicPartition. topic-name partition-num))))
 
 (defn get-all-messages [topic-name partition-num]
-  (let [consumer (jc/consumer (config/kafka-config (assoc app-config :kafka-group (.toString (UUID/randomUUID)))))]
+  (let [consumer (jc/consumer (config/kafka-config (assoc (app-config) :kafka-group (.toString (UUID/randomUUID)))))]
     (jc/subscribe consumer [{:topic-name topic-name}])
     (jc/seek-to-beginning-eager consumer)
     (let [min-offset (get-min-offset topic-name partition-num)
