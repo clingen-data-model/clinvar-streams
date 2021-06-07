@@ -1100,8 +1100,9 @@
                                                             (assoc :clinical_assertion_trait_set
                                                                    (clean-trait-set (:clinical_assertion_trait_set %))))
                                                        (:clinical_assertion_observations assertion)))
-          (assoc :clinical_assertion_variations (map #(dissoc % :release_date :dirty :event_type)
-                                                     (:clinical_assertion_variations assertion)))
+          (assoc :clinical_assertion_variation (variation-list-to-compound
+                                                 (map #(dissoc % :release_date :dirty :event_type)
+                                                      (:clinical_assertion_variations assertion))))
           ; Set entity_type used by downstream processors
           (assoc :entity_type "clinical_assertion")
           ; If assertion event is delete, set deleted
