@@ -1,6 +1,7 @@
 (ns clinvar-streams.util
   (:require [clojure.string :as s]
-            [clojure.core.async :as async])
+            [clojure.core.async :as async]
+            [clojure.set :as set])
   (:gen-class))
 
 (defn get-env-required
@@ -72,3 +73,28 @@
             (first to-check)
             max-val)
           (rest to-check))))))
+
+(defn simplify-dollar-map [m]
+  "Return (get m :$) if m is a map and :$ is the only key. Otherwise return m.
+  Useful for BigQuery JSON serialization where single values may be turned into $ maps"
+  (if (and (map? m)
+           (= '(:$) (keys m)))
+    (:$ m)
+    m))
+
+(defn as-vec-if-not [val]
+  "If val is not a sequential collection (maps, sets, strings are not), return it in a vector."
+  ; strings are already not sequential, but it feels safer to be explicit
+  (if (and (not (string? val))
+           (sequential? val))
+    val [val]))
+
+(defn set-union-all
+  "Return the set union of all of the provided cols."
+  [& cols]
+  (loop [todo cols
+         output #{}]
+    (if (empty? todo)
+      output
+      (recur (rest todo)
+             (set/union output (into #{} (first todo)))))))

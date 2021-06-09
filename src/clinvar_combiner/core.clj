@@ -1,6 +1,9 @@
 (ns clinvar-combiner.core
   (:require [clinvar-streams.storage.database-sqlite.sink :as sink]
             [clinvar-streams.storage.database-sqlite.client :as db-client]
+            [clinvar-combiner.combiners.variation :as c-variation]
+            [clinvar-combiner.combiners.clinical-assertion :as c-assertion]
+            [clinvar-combiner.combiners.core :as c-core]
             [clinvar-streams.util :as util]
             [jackdaw.streams :as j]
             [jackdaw.serdes :as j-serde]
@@ -167,21 +170,21 @@
 
                       (= "end" sentinel-type)
                       ; Flush non-SCVs
-                      ; records-to-flush is lazy, avoid realizing it
+                      ; sink/get-dirty returns lazy seq, avoid realizing it
                       (do
-                        (doseq [record (sink/get-dirty release-sentinel)]
+                        (doseq [record (c-core/get-dirty release-sentinel)]
                           (let [record-json (json/generate-string record)]
                             (log/info record-json)
                             (jc/produce! producer (:output topic-metadata) record-json)))
 
 
                         ; Flush SCVs
-                        (let [scvs-to-flush (sink/dirty-bubble-scv release-sentinel)]
+                        (let [scvs-to-flush (c-assertion/dirty-bubble-scv release-sentinel)]
                           (log/info release-sentinel)
                           (log/infof "Received %d messages to flush" (count scvs-to-flush))
                           (doseq [clinical-assertion scvs-to-flush]
-                            (let [built-clinical-assertion (sink/build-clinical-assertion clinical-assertion)
-                                  built-clinical-assertion (sink/post-process-built-clinical-assertion built-clinical-assertion)
+                            (let [built-clinical-assertion (c-assertion/build-clinical-assertion clinical-assertion)
+                                  built-clinical-assertion (c-assertion/post-process-built-clinical-assertion built-clinical-assertion)
                                   built-clinical-assertion-json (json/generate-string built-clinical-assertion)]
                               (if (nil? (:id built-clinical-assertion))
                                 (throw (ex-info "assertion :id cannot be nil"
