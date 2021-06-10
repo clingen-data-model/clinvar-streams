@@ -1,6 +1,9 @@
 (ns clinvar-combiner.core
   (:require [clinvar-streams.storage.database-sqlite.sink :as sink]
             [clinvar-streams.storage.database-sqlite.client :as db-client]
+            [clinvar-combiner.combiners.variation :as c-variation]
+            [clinvar-combiner.combiners.clinical-assertion :as c-assertion]
+            [clinvar-combiner.combiners.core :as c-core]
             [clinvar-streams.util :as util]
             [jackdaw.streams :as j]
             [jackdaw.serdes :as j-serde]
@@ -16,11 +19,12 @@
            (org.apache.kafka.common TopicPartition))
   (:gen-class))
 
-(def app-config {:kafka-host "pkc-4yyd6.us-east1.gcp.confluent.cloud:9092"
-                 :kafka-user (util/get-env-required "KAFKA_USER")
-                 :kafka-password (util/get-env-required "KAFKA_PASSWORD")
-                 :kafka-group (util/get-env-required "KAFKA_GROUP")
-                 })
+(defn app-config []
+  {:kafka-host "pkc-4yyd6.us-east1.gcp.confluent.cloud:9092"
+   :kafka-user (util/get-env-required "KAFKA_USER")
+   :kafka-password (util/get-env-required "KAFKA_PASSWORD")
+   :kafka-group (util/get-env-required "KAFKA_GROUP")
+   })
 
 (def topic-metadata
   {:input
@@ -129,18 +133,12 @@
 (defn -main
   "Construct topology and start kafka streams application"
   [& args]
-  (write-map-to-file (kafka-config app-config) "kafka.properties")
+  (write-map-to-file (kafka-config (app-config)) "kafka.properties")
   (log/set-level! :debug)
   (db-client/init! "clinvar.sqlite3")
 
-  ;(let [builder (j/streams-builder)]
-  ;  (jc/seek)
-  ;  (topology builder (:input topic-metadata) (:output topic-metadata))
-  ;  (let [app (j/kafka-streams builder (kafka-config app-config))]
-  ;    (log/info "Starting Kafka Streams app")
-  ;    (j/start app)))
-  (let [consumer (jc/consumer (kafka-config app-config))
-        producer (jc/producer (kafka-config app-config))
+  (let [consumer (jc/consumer (kafka-config (app-config)))
+        producer (jc/producer (kafka-config (app-config)))
         topic-name (get-in topic-metadata [:input :topic-name])
         continue (atom true)
         poll-interval-millis 5000]
@@ -172,26 +170,28 @@
 
                       (= "end" sentinel-type)
                       ; Flush non-SCVs
-                      ; records-to-flush is lazy, avoid realizing it
+                      ; sink/get-dirty returns lazy seq, avoid realizing it
                       (do
-                        (doseq [record (sink/get-dirty release-sentinel)]
+                        (doseq [record (c-core/get-dirty release-sentinel)]
                           (let [record-json (json/generate-string record)]
                             (log/info record-json)
                             (jc/produce! producer (:output topic-metadata) record-json)))
 
 
                         ; Flush SCVs
-                        (let [scvs-to-flush (sink/dirty-bubble-scv release-sentinel)]
+                        (let [scvs-to-flush (c-assertion/dirty-bubble-scv release-sentinel)]
                           (log/info release-sentinel)
                           (log/infof "Received %d messages to flush" (count scvs-to-flush))
                           (doseq [clinical-assertion scvs-to-flush]
-                            (let [built-clinical-assertion (sink/build-clinical-assertion clinical-assertion)
-                                  built-clinical-assertion (sink/post-process-built-clinical-assertion built-clinical-assertion)
+                            (let [built-clinical-assertion (c-assertion/build-clinical-assertion clinical-assertion)
+                                  built-clinical-assertion (c-assertion/post-process-built-clinical-assertion built-clinical-assertion)
                                   built-clinical-assertion-json (json/generate-string built-clinical-assertion)]
-                              (assert (not (nil? (:id built-clinical-assertion)))
-                                      (str "assertion :id cannot be nil: " built-clinical-assertion-json))
-                              (assert (not (nil? (:release_date built-clinical-assertion)))
-                                      (str "assertion :release_date cannot be nil: " built-clinical-assertion-json))
+                              (if (nil? (:id built-clinical-assertion))
+                                (throw (ex-info "assertion :id cannot be nil"
+                                                {:cause built-clinical-assertion-json})))
+                              (if (nil? (:release_date built-clinical-assertion))
+                                (throw (ex-info "assertion :release_date cannot be nil"
+                                                {:cause built-clinical-assertion-json})))
                               (let [fpath (format "debug/SCV/%s/%s.json"
                                                   (:release_date built-clinical-assertion)
                                                   (:id built-clinical-assertion))]

@@ -1,0 +1,23 @@
+# Cloud Build configuration for clinvar-streams
+#
+# Command line test usage:
+# gcloud builds submit --project=clingen-stage --config ./cloudbuild.yaml \
+#  --substitutions=COMMIT_SHA="testbuild" .
+
+# Builds clinvar-streams and tags it in the project gcr
+steps:
+  - name: 'clojure:openjdk-11-lein'
+    args: [ 'lein', 'test' ]
+  - name: 'gcr.io/cloud-builders/docker'
+    args: [ 'build', '.',
+            '-f', 'docker/clinvar-streams.Dockerfile',
+            '-t', 'clinvar-streams:$COMMIT_SHA' ]
+  - name: 'gcr.io/cloud-builders/docker'
+    args: [ 'tag', 'clinvar-streams:$COMMIT_SHA', 'gcr.io/$PROJECT_ID/clinvar-streams:$COMMIT_SHA' ]
+
+# push the images
+images:
+  - 'gcr.io/$PROJECT_ID/clinvar-streams:$COMMIT_SHA'
+
+# timeout if not complete in 30 minutes
+timeout: 1800s
