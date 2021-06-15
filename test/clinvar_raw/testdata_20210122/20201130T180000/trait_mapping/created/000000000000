@@ -1,3 +1,0 @@
-{"clinical_assertion_id":"SCV001447869","trait_type":"Disease","mapping_ref":"Preferred","medgen_name":"not provided","medgen_id":"CN517202","mapping_value":"not provided","mapping_type":"Name"}
-{"clinical_assertion_id":"SCV001447869","trait_type":"Finding","mapping_ref":"HP","medgen_name":"Breast carcinoma","medgen_id":"C0678222","mapping_value":"HP:0003002","mapping_type":"XRef"}
-{"clinical_assertion_id":"SCV001447869","trait_type":"Finding","mapping_ref":"HP","medgen_name":"Endometrial carcinoma","medgen_id":"C0476089","mapping_value":"HP:0012114","mapping_type":"XRef"}

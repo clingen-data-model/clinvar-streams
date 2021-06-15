@@ -1,7 +1,0 @@
-{"medgen_name":"Costello syndrome","mapping_type":"XRef","mapping_ref":"OMIM","mapping_value":"218040","clinical_assertion_id":"SCV000062127","medgen_id":"C0587248","trait_type":"Disease"}
-{"medgen_name":"Non-small cell lung cancer","mapping_type":"XRef","mapping_ref":"MedGen","mapping_value":"C0007131","clinical_assertion_id":"SCV000061597","medgen_id":"C0007131","trait_type":"Disease"}
-{"medgen_name":"Familial adenomatous polyposis 1","mapping_type":"XRef","mapping_ref":"MedGen","mapping_value":"C2713442","clinical_assertion_id":"SCV000153895","medgen_id":"C2713442","trait_type":"Disease"}
-{"medgen_name":"Alagille syndrome 1","mapping_type":"XRef","mapping_ref":"MedGen","mapping_value":"C1956125","clinical_assertion_id":"SCV000645524","medgen_id":"C1956125","trait_type":"Disease"}
-{"medgen_name":"not provided","mapping_type":"Name","mapping_ref":"Preferred","mapping_value":"Not Provided","clinical_assertion_id":"SCV000321788","medgen_id":"CN517202","trait_type":"Disease"}
-{"medgen_name":"not provided","mapping_type":"Name","mapping_ref":"Preferred","mapping_value":"not provided","clinical_assertion_id":"SCV000708478","medgen_id":"CN517202","trait_type":"Disease"}
-{"medgen_name":"Primary familial hypertrophic cardiomyopathy","mapping_type":"XRef","mapping_ref":"Orphanet","mapping_value":"ORPHA99739","clinical_assertion_id":"SCV000059054","medgen_id":"C0949658","trait_type":"Disease"}

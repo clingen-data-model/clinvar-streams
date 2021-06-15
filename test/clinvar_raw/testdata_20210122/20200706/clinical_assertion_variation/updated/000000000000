@@ -1,1 +1,0 @@
-{"variation_type":"Variation","child_ids":[],"descendant_ids":[],"subclass_type":"SimpleAllele","clinical_assertion_id":"SCV000059054","content":"{\"AttributeSet\":{\"Attribute\":{\"$\":\"NC_000011.9:g.47364249G\u003eA\",\"@Type\":\"HGVS\"}},\"GeneList\":{\"Gene\":{\"@Symbol\":\"MYBPC3\"}}}","id":"SCV000059054.0"}

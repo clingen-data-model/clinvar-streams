@@ -1,1 +1,0 @@
-{"clinical_assertion_id":"SCV001411685","subclass_type":"SimpleAllele","variation_type":"Variation","content":"{\"AttributeSet\":{\"Attribute\":{\"$\":\"NM_004333.4:c.1781A\u003eG\",\"@Type\":\"HGVS\"}},\"GeneList\":{\"Gene\":{\"@Symbol\":\"BRAF\"}}}","descendant_ids":[],"child_ids":[],"id":"SCV001411685.0"}

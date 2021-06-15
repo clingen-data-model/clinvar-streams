@@ -12,7 +12,8 @@ pom.xml.asc
 .hg/
 .idea/
 
-# generated files
+
 /*.topic
 /*.gz
 /*.sqlite3
+testdata_*/
