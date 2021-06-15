@@ -1,6 +1,0 @@
-{"name":"Achromatopsia type 2","id":"53792","type":"Disease","xrefs":[],"keywords":[],"attribute_content":[],"alternate_symbols":[],"alternate_names":[]}
-{"name":"Prostate cancer","id":"40360","type":"Finding","xrefs":[],"keywords":[],"attribute_content":[],"alternate_symbols":[],"alternate_names":[]}
-{"name":"Piebaldism","id":"26255","type":"Finding","xrefs":["{\"db\":\"Human Phenotype Ontology\",\"id\":\"HP:0007544\",\"type\":\"primary\"}","{\"db\":\"Human Phenotype Ontology\",\"id\":\"HP:0007544\",\"ref_field\":\"name\"}"],"keywords":[],"attribute_content":[],"medgen_id":"CN006616","alternate_symbols":[],"alternate_names":[]}
-{"name":"Familial adenomatous polyposis","id":"36952","type":"Disease","xrefs":[],"keywords":[],"attribute_content":[],"medgen_id":"CN240755","alternate_symbols":[],"alternate_names":[]}
-{"name":"Wilms Tumor","id":"36664","type":"Disease","xrefs":["{\"db\":\"Illumina Clinical Services Laboratory,Illumina\",\"id\":\"161099\",\"ref_field\":\"name\"}"],"keywords":[],"attribute_content":[],"medgen_id":"CN253810","alternate_symbols":[],"alternate_names":[]}
-{"name":"Familial hypertrophic cardiomyopathy 19","id":"53616","type":"Disease","xrefs":["{\"db\":\"NCBI for submitter\",\"id\":\"7974698\",\"ref_field\":\"name\"}"],"keywords":[],"attribute_content":[],"medgen_id":"CN283263","alternate_symbols":[],"alternate_names":[]}

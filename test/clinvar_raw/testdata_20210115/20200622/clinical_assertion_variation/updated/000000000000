@@ -1,1 +1,0 @@
-{"variation_type":"Variation","descendant_ids":[],"clinical_assertion_id":"SCV000683147","subclass_type":"SimpleAllele","child_ids":[],"id":"SCV000683147.0","content":"{\"AttributeSet\":{\"Attribute\":{\"$\":\"NM_007294.3:c.4065_4068del\",\"@Type\":\"HGVS\"}},\"GeneList\":{\"Gene\":{\"@Symbol\":\"BRCA1\"}}}"}

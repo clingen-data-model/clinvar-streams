@@ -1,6 +1,0 @@
-{"clinical_assertion_id":"SCV001135171","medgen_name":"Neural tube defects, folate-sensitive","medgen_id":"C1866558","mapping_ref":"OMIM","mapping_value":"601634","trait_type":"Disease","mapping_type":"XRef"}
-{"clinical_assertion_id":"SCV001147149","medgen_name":"not provided","medgen_id":"CN517202","mapping_ref":"Preferred","mapping_value":"not provided","trait_type":"Disease","mapping_type":"Name"}
-{"clinical_assertion_id":"SCV001144884","medgen_name":"not provided","medgen_id":"CN517202","mapping_ref":"Preferred","mapping_value":"not provided","trait_type":"Disease","mapping_type":"Name"}
-{"clinical_assertion_id":"SCV001144806","medgen_name":"not provided","medgen_id":"CN517202","mapping_ref":"Preferred","mapping_value":"not provided","trait_type":"Disease","mapping_type":"Name"}
-{"clinical_assertion_id":"SCV001135324","medgen_name":"Stargardt disease 1","medgen_id":"C1855465","mapping_ref":"OMIM","mapping_value":"248200","trait_type":"Disease","mapping_type":"XRef"}
-{"clinical_assertion_id":"SCV001147323","medgen_name":"not provided","medgen_id":"CN517202","mapping_ref":"Preferred","mapping_value":"not provided","trait_type":"Disease","mapping_type":"Name"}
