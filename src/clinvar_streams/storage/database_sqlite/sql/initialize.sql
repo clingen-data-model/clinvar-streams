@@ -41,6 +41,12 @@ drop table if exists trait_mapping;
 drop table if exists release_sentinels;
 drop table if exists release_sentinels_rules;
 
+drop table if exists metadata;
+create table metadata (
+    key text,
+    value text,
+    primary key(key) on conflict replace
+);
 
 create table release_sentinels (
     release_date text,          -- 2020-10-15.0 2020-10-15.1

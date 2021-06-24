@@ -2,7 +2,8 @@
   (:require [clojure.java.io :as io]
             [clojure.java.jdbc :as jdbc]
             [clojure.java.shell :refer :all]
-            [taoensso.timbre :as log])
+            [taoensso.timbre :as log]
+            [clinvar-streams.util :as util])
   (:import [java.io File]
            (java.sql PreparedStatement)
            (java.util Iterator)))
@@ -20,23 +21,27 @@
 (defn configure!
   "Configures the client to use the database at the provided db-path.
   Opens and closes a Connection, to verify that a connection could be established"
-  [db-path]
-  (reset! db {:classname    "org.sqlite.JDBC"
-              :subprotocol  "sqlite"
-              :subname      db-path
-              :foreign_keys "on"})                          ; foreign_keys=on sets PRAGMA foreign_keys=on
-  (let [conn (jdbc/get-connection @db)]
-    (.close conn)))
+  ([]
+   (configure! (util/get-env-required "SQLITE_DB")))
+  ([db-path]
+   (reset! db {:classname "org.sqlite.JDBC"
+               :subprotocol "sqlite"
+               :subname db-path
+               :foreign_keys "on"})                         ; foreign_keys=on sets PRAGMA foreign_keys=on
+   (let [conn (jdbc/get-connection @db)]
+     (.close conn))))
 
 (defn init!
   "Initializes the database with given file path, relative to cwd.
   Will remove all prior contents, according to the contents of initialize.sql"
-  [db-path]
-  (configure! db-path)
-  (let [sh-ret (sh "sqlite3" db-path (str ".read " (sql-path "initialize.sql")))]
-    (if (not= 0 (:exit sh-ret))
-      (do (log/error (ex-info "Failed to run initialize.sql" sh-ret))
-          (throw (ex-info "Failed to run initialize.sql" sh-ret))))))
+  ([]
+   (init! (util/get-env-required "SQLITE_DB")))
+  ([db-path]
+   (configure! db-path)
+   (let [sh-ret (sh "sqlite3" db-path (str ".read " (sql-path "initialize.sql")))]
+     (if (not= 0 (:exit sh-ret))
+       (do (log/error (ex-info "Failed to run initialize.sql" sh-ret))
+           (throw (ex-info "Failed to run initialize.sql" sh-ret)))))))
 
 ;(defn query [[sql & args]]
 ;  (jdbc/query @db (cons sql args)))
@@ -56,13 +61,25 @@
                       (recur (dec count)
                              (conj names (.getColumnName rs-meta (dec count))))))]
     (let [it (reify Iterator
-                    (next [this] (do (.next rs)
-                                     (into {} (map #(vector % (.getObject rs %)) col-names))))
-                    (hasNext [this] (not (or (.isLast rs) (.isAfterLast rs)))))
+               (next [this] (do (.next rs)
+                                (into {} (map #(vector % (.getObject rs %)) col-names))))
+               (hasNext [this] (not (or (.isLast rs) (.isAfterLast rs)))))
           it-seq (iterator-seq it)]
-      it-seq
-      )
-    ;(for [:when (not (.isAfterLast rs))]
-    ;  (into {} (map #(vector % (.getObject rs %)) col-names)))
-    ;(let [it (reify Iter)])
-    ))
+      it-seq)))
+
+(defn offset-key
+  [topic-name partition-idx]
+  (str "latest_offset_" topic-name "_" partition-idx))
+
+(defn update-offset [topic-name partition-idx offset]
+  (log/debug {:fn :update-offset :offset offset :topic-name topic-name :partition-idx partition-idx})
+  (let [ret (jdbc/execute! @db ["insert into metadata(key, value) values(?, ?)"
+                                (offset-key topic-name partition-idx) offset])]))
+
+(defn get-offset [topic-name partition-idx]
+  (log/debug {:fn :get-offset :topic-name topic-name :partition-idx partition-idx})
+  (let [ret (jdbc/query @db ["select value from metadata where key = ?"
+                             (offset-key topic-name partition-idx)])
+        value (:value ret)]
+    (log/debug {:fn :get-offset :offset value})
+    value))
