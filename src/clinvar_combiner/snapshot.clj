@@ -1,11 +1,15 @@
 (ns clinvar-combiner.snapshot
   (:require [clinvar-streams.storage.database-sqlite.client :as db-client]
-            [clinvar-combiner.config]
+            [clinvar-combiner.config
+             :refer [topic-metadata]]
+            [clinvar-combiner.stream :as stream]
             [clojure.java.shell :refer [sh]]
             [me.raynes.fs :as fs]
             [taoensso.timbre :as log]
             [clojure.string :as s]
-            [jackdaw.client :as jc])
+            [jackdaw.client :as jc]
+            [clinvar-combiner.config :as config]
+            [clinvar-streams.util :as util])
   (:import (java.nio.file Paths)
            (com.google.common.io ByteStreams)
            (com.google.cloud.storage
@@ -14,13 +18,13 @@
            (java.io FileInputStream)
            (java.nio.channels FileChannel)
            (org.apache.kafka.common TopicPartition)
-           (java.time Duration)))
+           (java.time Duration Instant)))
 
 
 (defn download-file
   "Pull the specified file from cloud storage, writing it locally to target-path"
   [bucket blob-name target-path]
-  (log/info {:fn :retrieve-snapshot
+  (log/info {:fn :download-file
              :bucket bucket
              :blob-name blob-name
              :target-path target-path})
@@ -30,7 +34,9 @@
     (.downloadTo blob target-path)
     target-path))
 
-(defn BlobId->str [blob-id]
+(defn BlobId->str
+  "Formats a BlobId as a fully qualified URI string."
+  [blob-id]
   (format "gs://%s/%s" (.getBucket blob-id) (.getName blob-id)))
 
 (defn upload-file
@@ -71,10 +77,14 @@
       (throw (ex-info "Failed to archive file" ret))
       dest)))
 
-(defn trim-suffix [s suffix]
+(defn trim-suffix
+  "Return s, with trailing suffix removed if s ends with suffix."
+  [s suffix]
   (if (.endsWith s suffix) (subs s 0 (- (count s) (count suffix))) s))
 
-(defn- topic-partitions [consumer topic-name]
+(defn- topic-partitions
+  "Returns a seq of TopicPartitions that the consumer is subscribed to for topic-name."
+  [consumer topic-name]
   (let [partition-infos (.partitionsFor consumer topic-name)]
     (map #(TopicPartition. (.topic %) (.partition %)) partition-infos)))
 
@@ -109,14 +119,13 @@
   (jc/consumer (clinvar-combiner.config/kafka-config (clinvar-combiner.config/app-config))))
 
 (defn build-database
-  [consumer]
-  (let [db-path clinvar-combiner.config/sqlite-db
-        ; TODO maybe wipe database first? Might want both options, from scratch
-        ; or from base existing data
-        consumer-thread '(Thread. (partial clinvar-combiner.core/-main-streaming))
-        topic-name (get-in clinvar-combiner.config/topic-metadata
-                           [:input :topic-name])
-        partitions (topic-partitions consumer topic-name)
+  [consumer partitions]
+  (log/info {:fn :build-database :partitions partitions})
+  (let [consume! (stream/make-consume-fn consumer)
+        produce! (fn [_])
+        consumer-thread (Thread. (partial stream/run-streaming-mode
+                                          consume!
+                                          produce!))
         end-offsets (read-end-offsets consumer partitions)
         partitions-finished-reading? (fn []
                                        (every? identity
@@ -133,39 +142,96 @@
                                                    (= local-offset remote-offset)))))]
     (.start consumer-thread)
     (while (not (partitions-finished-reading?))
-      (log/debug "Waiting for topics to be finished reading")
-      (Thread/sleep (.toMillis (Duration/ofSeconds 10))))
+      (log/debug "Waiting for topics to be finished reading...")
+      (Thread/sleep (.toMillis (Duration/ofSeconds 5))))
+    (log/info "Finished building database")
+    ; Turn off main poll loop, which ends consumer-thread
+    (reset! stream/run-streaming-mode-continue false)
     ))
 
-(defn update-consumer-offsets
-  "partition-offsets should be a map of {[topic-name part-idx] offset, ...}
+;(defn update-consumer-offsets
+;  "partition-offsets should be a map of {[topic-name part-idx] offset, ...}
+;
+;  Update the offsets in the consumer to these so that the next poll will start at offset+1
+;  on each partition."
+;  [consumer partition-offsets]
+;  ; TODO
+;  )
 
-  Update the offsets in the consumer to these so that the next poll will start at offset+1
-  on each partition."
-  [partition-offsets]
-  )
+(defn generate-versioned-archive-name [basename version]
+  (format (str basename ".%s.tar.gz")
+          version))
+;(defn parse-versioned-archive-name [archive-name]
+;  ; TODO
+;  ())
+
+
+
+(defn download-version
+  "Sets the local database state db-path to be the version specified"
+  [version db-path]
+  (log/info {:fn :download-version :version version :db-path db-path})
+  (fs/delete db-path)
+  (let [versioned-archive (generate-versioned-archive-name "clinvar.sqlite3" version)]
+    (download-file config/snapshot-bucket versioned-archive versioned-archive)
+    (extract-file versioned-archive ".")))
+
+(defn ^String make-timestamp
+  "Returns a string timestamp for the current UTC time.
+  Formatted in ISO-8601 with punctuation (DateTimeFormatter/ISO_INSTANT)"
+  []
+  (str (Instant/now)))
+
+(defn set-consumer-to-db-offset
+  "Takes a consumer and a seq of TopicPartition objects."
+  [consumer partitions]
+  (doseq [partition partitions]
+    (let [topic-name (.topic partition)
+          partition-idx (.partition partition)
+          local-offset (or (db-client/get-offset topic-name partition-idx) 0)]
+     (log/info (format "Seeking to offset %s for partition (%s, %s)"
+                       local-offset topic-name partition-idx))
+     (jc/seek consumer partition local-offset))))
 
 (defn -main [& args]
   (let [version-to-resume-from (System/getenv "DX_CV_COMBINER_SNAPSHOT_VERSION")
-        consumer (make-consumer)]
-    ; Update consumer offset based on version-to-resume-from
-    (build-database consumer))
+        consumer (make-consumer)
+        topic-name (-> topic-metadata :input :topic-name)
+        partitions (topic-partitions consumer topic-name)]
+    (apply (partial jc/assign consumer) partitions)
+
+    ; Use version to set database state (if needed) and set the consumer offsets
+    (cond
+      ; Resume from start of topic
+      (empty? version-to-resume-from)
+      (do (log/info "No snapshot resume version specified, starting from scratch")
+          (log/info "Deleting local db")
+          (fs/delete config/sqlite-db)
+          (db-client/init!)
+          (log/info "Seeking to beginning of topic")
+          (jc/seek-to-beginning-eager consumer)),
+
+      ; Resume from whatever the local state is
+      (= "LOCAL" version-to-resume-from)
+      (do (log/info "Resuming from latest local snapshot")
+          (db-client/configure!)
+          (set-consumer-to-db-offset consumer partitions)),
+
+      ; Wipe local state and resume from a remote snapshot
+      :else
+      (do (log/info "Attempting to resume from remote snapshot version:" version-to-resume-from)
+          (log/info "Deleting local db")
+          (fs/delete config/sqlite-db)
+          (db-client/init!)
+          (download-version version-to-resume-from config/sqlite-db)
+          (set-consumer-to-db-offset consumer partitions)))
+
+    (build-database consumer partitions))
 
   (let [db-path clinvar-combiner.config/sqlite-db
         archive (archive-file db-path (str db-path ".tar.gz"))
-        versioned-name (str archive ".0")
-        uploaded-blob-id (upload-file "clinvar-streams-dev" archive versioned-name)])
+        bucket config/snapshot-bucket
+        versioned-name (generate-versioned-archive-name (fs/base-name db-path) (db-client/latest-release-date))
+        uploaded-blob-id (upload-file bucket archive versioned-name)]
+    (log/info "Uploaded:" (BlobId->str uploaded-blob-id)))
   )
-
-(defn -test-main [& args]
-  (let [db-path clinvar-combiner.config/sqlite-db
-        archive (archive-file db-path (str db-path ".tar.gz"))
-        versioned-name (str archive ".0")
-        uploaded-blob-id (upload-file "clinvar-streams-dev" archive versioned-name)
-        _ (log/info (BlobId->str uploaded-blob-id))
-        downloaded-file (download-file "clinvar-streams-dev" versioned-name archive)
-
-        ;_ (extract-file archive ".")
-        ;extracted (trim-suffix archive ".tar.gz")
-        ]
-    ))

@@ -67,19 +67,27 @@
           it-seq (iterator-seq it)]
       it-seq)))
 
-(defn offset-key
-  [topic-name partition-idx]
-  (str "latest_offset_" topic-name "_" partition-idx))
+;(defn offset-key
+;  [topic-name partition-idx]
+;  (str "latest_offset_" topic-name "_" partition-idx))
 
 (defn update-offset [topic-name partition-idx offset]
   (log/debug {:fn :update-offset :offset offset :topic-name topic-name :partition-idx partition-idx})
-  (let [ret (jdbc/execute! @db ["insert into metadata(key, value) values(?, ?)"
-                                (offset-key topic-name partition-idx) offset])]))
+  (let [ret (jdbc/execute! @db ["insert into topic_offsets(topic_name, partition, offset) values(?, ?, ?)"
+                                topic-name partition-idx offset])]))
 
 (defn get-offset [topic-name partition-idx]
   (log/debug {:fn :get-offset :topic-name topic-name :partition-idx partition-idx})
-  (let [ret (jdbc/query @db ["select value from metadata where key = ?"
-                             (offset-key topic-name partition-idx)])
-        value (:value ret)]
-    (log/debug {:fn :get-offset :offset value})
-    value))
+  (let [ret (jdbc/query @db ["select offset from topic_offsets where topic_name = ? and partition = ?"
+                             topic-name partition-idx])
+        _ (log/debug {:ret ret})
+        offset (:offset (first ret))]
+    (log/debug {:fn :get-offset :offset offset})
+    offset))
+
+(defn latest-release-date
+  "Returns the latest date on a received release sentinel message."
+  []
+  (let [ret (jdbc/query @db ["select max(release_date) as m from release_sentinels"])]
+    (log/debug {:fn :latest-release-date :ret ret})
+    (:m (first ret))))
