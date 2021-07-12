@@ -9,7 +9,8 @@
             [clinvar-combiner.stream
              :refer [make-consume-fn make-produce-fn
                      run-streaming-mode]]
-            [clinvar-combiner.snapshot]
+            [clinvar-combiner.snapshot :as snapshot]
+            [clinvar-combiner.service]
             [clinvar-streams.util :as util]
             [jackdaw.streams :as j]
             [jackdaw.serdes :as j-serde]
@@ -21,14 +22,13 @@
             [clojure.java.io :as io]
             [clojure.java.jdbc :as jdbc]
             [clojure.string :as s]
-            [clojure.spec.alpha :as spec])
+            [clojure.spec.alpha :as spec]
+            [clinvar-combiner.stream :as stream])
   (:import [org.apache.kafka.streams KafkaStreams]
            [java.util Properties]
            [java.time Duration]
            (org.apache.kafka.common TopicPartition))
   (:gen-class))
-
-(def previous-entity-type (atom ""))
 
 ;(defn to-db
 ;  "Writes an entry to the database for key and value. Delegates to appropriate handling in db module."
@@ -47,12 +47,19 @@
   (log/info {:fn :seek-to-beginning :consumer consumer :topic-name topic-name})
   ;(jc/seek-to-beginning-eager consumer)
   (jc/poll consumer (Duration/ofSeconds 5))
-  (jc/seek consumer (TopicPartition. topic-name 0) 0)
+  (let [assignment (jc/assignment consumer)]
+    (log/info {:assignment assignment})
+    (doseq [topic-partition assignment]
+      (jc/seek consumer (TopicPartition.
+                          (:topic-name topic-partition)
+                          (:partition topic-partition))
+               0)))
   consumer)
 
 (defn -main-streaming
   "Configure and start kafka application run-streaming-mode"
   [& args]
+  (clinvar-combiner.service/start)
   (write-map-to-file (kafka-config (app-config)) "kafka.properties")
   (log/set-level! :debug)
   (db-client/init!)
@@ -60,16 +67,25 @@
   (let [consumer (jc/consumer (kafka-config (app-config)))
         producer (jc/producer (kafka-config (app-config)))
         topic-name (get-in topic-metadata [:input :topic-name])]
-    (println (:input topic-metadata))
-    (log/info "Subscribing to topic" topic-name)
-    (jc/subscribe consumer [(:input topic-metadata)])
-    (seek-to-beginning consumer topic-name)
+    (log/info "Subscribing to topic and assigning all partitions" (:input topic-metadata))
+    (let [topic-partitions (stream/topic-partitions consumer topic-name)]
+      (apply (partial jc/assign consumer) topic-partitions))
+    ;(jc/subscribe consumer [(:input topic-metadata)])
+
+    (let [version-to-resume-from config/version-to-resume-from]
+      (cond
+        (empty? version-to-resume-from)
+        (seek-to-beginning consumer topic-name),
+        (= "LOCAL" version-to-resume-from)
+        (stream/set-consumer-to-db-offset
+          consumer
+          (stream/topic-partitions consumer topic-name)),
+        :else
+        (snapshot/set-db-to-version! version-to-resume-from)))
 
     (let [consume! (make-consume-fn consumer)
           produce! (make-produce-fn producer)]
-      (run-streaming-mode consume! produce!))
-    )
-  )
+      (run-streaming-mode consume! produce!))))
 
 ;(def cli-options
 ;  [[nil "--mode" "Startup mode"
@@ -96,4 +112,4 @@
     (log/info {:mode mode})
     (case mode
       "snapshot" (clinvar-combiner.snapshot/-main args)
-      "stream" (-main args))))
+      "stream" (-main-streaming args))))

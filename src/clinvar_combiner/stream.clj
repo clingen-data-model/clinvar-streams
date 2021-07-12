@@ -10,7 +10,42 @@
             [clojure.java.io :as io]
             [clinvar-combiner.combiners.core :as c-core]
             [clojure.java.jdbc :as jdbc])
-  (:import (java.time Duration)))
+  (:import (java.time Duration)
+           (org.apache.kafka.common TopicPartition)
+           (org.apache.kafka.clients.consumer KafkaConsumer)))
+
+(defn topic-partitions
+  "Returns a seq of TopicPartitions that the consumer is subscribed to for topic-name."
+  [consumer topic-name]
+  (let [partition-infos (.partitionsFor consumer topic-name)]
+    (map #(TopicPartition. (.topic %) (.partition %)) partition-infos)))
+
+(defn make-consume-seq-batch
+  "Returns a lazy-seq over all the messages in a consumer, in batches received from poll()"
+  [consumer]
+  (letfn [(consume-batch [consumer]
+            (try (.commitSync ^KafkaConsumer consumer)
+                 (catch InterruptedException e
+                   (log/error "Got InterruptedException in commitSync():" e)))
+            (let [batch (try (jc/poll consumer (Duration/ofSeconds 5))
+                             (catch InterruptedException e
+                               (log/info "InterruptedException in poll() call:" e)))]
+              (if (not (empty? batch))
+                (lazy-cat [batch] (consume-batch consumer))
+                (lazy-cat [nil] (consume-batch consumer)))
+              ))]
+    (partial consume-batch consumer)) ; TODO
+  )
+
+(defn make-consume-fn-batch
+  [consumer]
+  (let [consumer-seq (atom ((make-consume-seq-batch consumer)))]
+    (letfn [(consume-fn []
+              (let [m (first @consumer-seq)]
+                ; rest is lazy
+                (reset! consumer-seq (rest @consumer-seq))
+                m))]
+      (partial consume-fn))))
 
 (defn make-consume-seq
   "Returns a function which when called returns a lazy-seq over all the messages
@@ -18,7 +53,14 @@
   are available at that time."
   [consumer]
   (letfn [(consume-batch [consumer]
-            (let [batch (jc/poll consumer (Duration/ofSeconds 5))]
+            (try (.commitSync ^KafkaConsumer consumer)
+                 (catch InterruptedException e
+                   (log/error "Got InterruptedException in commitSync():" e)))
+            (let [batch (try (jc/poll consumer (Duration/ofSeconds 5))
+                             (catch InterruptedException e
+                                    (log/info "InterruptedException in poll() call:" e)
+                                    ;(throw e)
+                                    ))]
               (if (not (empty? batch))
                 (lazy-cat batch (consume-batch consumer))
                 (lazy-cat [nil] (consume-batch consumer)))
@@ -44,6 +86,17 @@
   (letfn [(produce-fn [msg]
             (jc/produce! producer (:output topic-metadata) msg))]
     produce-fn))
+
+(defn set-consumer-to-db-offset
+  "Takes a consumer and a seq of TopicPartition objects."
+  [consumer partitions]
+  (doseq [partition partitions]
+    (let [topic-name (.topic partition)
+          partition-idx (.partition partition)
+          local-offset (or (db-client/get-offset topic-name partition-idx) 0)]
+      (log/info (format "Seeking to offset %s for partition (%s, %s)"
+                        local-offset topic-name partition-idx))
+      (jc/seek consumer partition local-offset))))
 
 (defn mark-database-clean! []
   (let [tables-to-clean ["release_sentinels"
@@ -118,12 +171,14 @@
           (produce-fn! record-json))))))
 
 (def run-streaming-mode-continue (atom true))
+(def run-streaming-mode-is-running (atom false))
 
 (defn run-streaming-mode
   "Runs the streaming mode of the combiner application. Reads messages by calling consume-fn
   with no args, stores messages locally, and sends appropriate output messages by calling
   produce-fn with a single message arg. Runs while run-streaming-mode-continue is truthy."
   [consume-fn produce-fn]
+  (reset! run-streaming-mode-is-running true)
   (log/info {:fn :run-streaming-mode})
   (while @run-streaming-mode-continue
     (let [rec (consume-fn)]
@@ -144,4 +199,5 @@
               ; Update offset in db to offset + 1 (next offset to read)
               (db-client/update-offset topic-name partition-idx (inc offset))))
         (log/info "No new messages"))))
-  (log/info {:fn :run-streaming-mode :msg "Exiting streaming mode"}))
+  (log/info {:fn :run-streaming-mode :msg "Exiting streaming mode"})
+  (reset! run-streaming-mode-is-running false))

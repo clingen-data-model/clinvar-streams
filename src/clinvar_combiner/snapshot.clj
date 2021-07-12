@@ -28,7 +28,7 @@
              :bucket bucket
              :blob-name blob-name
              :target-path target-path})
-  (let [target-path (Paths/get target-path (make-array java.lang.String 0))
+  (let [target-path (Paths/get target-path (make-array String 0))
         blob (.get (.getService (StorageOptions/getDefaultInstance))
                    (BlobId/of bucket blob-name))]
     (.downloadTo blob target-path)
@@ -81,12 +81,6 @@
   "Return s, with trailing suffix removed if s ends with suffix."
   [s suffix]
   (if (.endsWith s suffix) (subs s 0 (- (count s) (count suffix))) s))
-
-(defn- topic-partitions
-  "Returns a seq of TopicPartitions that the consumer is subscribed to for topic-name."
-  [consumer topic-name]
-  (let [partition-infos (.partitionsFor consumer topic-name)]
-    (map #(TopicPartition. (.topic %) (.partition %)) partition-infos)))
 
 (defn- read-end-offsets [consumer topic-partitions]
   (let [kafka-end-offsets (.endOffsets consumer topic-partitions)
@@ -182,22 +176,17 @@
   []
   (str (Instant/now)))
 
-(defn set-consumer-to-db-offset
-  "Takes a consumer and a seq of TopicPartition objects."
-  [consumer partitions]
-  (doseq [partition partitions]
-    (let [topic-name (.topic partition)
-          partition-idx (.partition partition)
-          local-offset (or (db-client/get-offset topic-name partition-idx) 0)]
-     (log/info (format "Seeking to offset %s for partition (%s, %s)"
-                       local-offset topic-name partition-idx))
-     (jc/seek consumer partition local-offset))))
+(defn set-db-to-version! [version-to-resume-from]
+  (log/info "Deleting local db")
+  (fs/delete config/sqlite-db)
+  (download-version version-to-resume-from config/sqlite-db)
+  (db-client/init!))
 
 (defn -main [& args]
-  (let [version-to-resume-from (System/getenv "DX_CV_COMBINER_SNAPSHOT_VERSION")
+  (let [version-to-resume-from config/version-to-resume-from
         consumer (make-consumer)
         topic-name (-> topic-metadata :input :topic-name)
-        partitions (topic-partitions consumer topic-name)]
+        partitions (stream/topic-partitions consumer topic-name)]
     (apply (partial jc/assign consumer) partitions)
 
     ; Use version to set database state (if needed) and set the consumer offsets
@@ -205,9 +194,7 @@
       ; Resume from start of topic
       (empty? version-to-resume-from)
       (do (log/info "No snapshot resume version specified, starting from scratch")
-          (log/info "Deleting local db")
-          (fs/delete config/sqlite-db)
-          (db-client/init!)
+          (set-db-to-version! version-to-resume-from)
           (log/info "Seeking to beginning of topic")
           (jc/seek-to-beginning-eager consumer)),
 
@@ -215,16 +202,13 @@
       (= "LOCAL" version-to-resume-from)
       (do (log/info "Resuming from latest local snapshot")
           (db-client/configure!)
-          (set-consumer-to-db-offset consumer partitions)),
+          (stream/set-consumer-to-db-offset consumer partitions)),
 
       ; Wipe local state and resume from a remote snapshot
       :else
       (do (log/info "Attempting to resume from remote snapshot version:" version-to-resume-from)
-          (log/info "Deleting local db")
-          (fs/delete config/sqlite-db)
-          (db-client/init!)
-          (download-version version-to-resume-from config/sqlite-db)
-          (set-consumer-to-db-offset consumer partitions)))
+          (set-db-to-version! version-to-resume-from)
+          (stream/set-consumer-to-db-offset consumer partitions)))
 
     (build-database consumer partitions))
 
