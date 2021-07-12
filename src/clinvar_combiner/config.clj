@@ -4,6 +4,7 @@
 
 (def sqlite-db (util/get-env-required "SQLITE_DB"))
 (def snapshot-bucket (util/get-env-required "DX_CV_SNAPSHOT_BUCKET"))
+(def version-to-resume-from (System/getenv "DX_CV_COMBINER_SNAPSHOT_VERSION"))
 
 (defn app-config []
   {:kafka-host "pkc-4yyd6.us-east1.gcp.confluent.cloud:9092"
@@ -32,6 +33,7 @@
   "Expects, at a minimum, :kafka-user and :kafka-password in opts. "
   [opts]
   {"ssl.endpoint.identification.algorithm" "https"
+   "enable.auto.commit" "false"
    "compression.type" "gzip"
    "sasl.mechanism" "PLAIN"
    "request.timeout.ms" "20000"
