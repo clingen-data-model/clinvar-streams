@@ -1,1 +1,0 @@
-{"clinical_assertion_id":"SCV000926774","content":"{\"AttributeSet\":{\"Attribute\":{\"$\":\"NM_000350.2:c.6148G\u003eC\",\"@Type\":\"HGVS\"}},\"GeneList\":{\"Gene\":{\"@Symbol\":\"ABCA4\"}}}","variation_type":"Variation","subclass_type":"SimpleAllele","child_ids":[],"descendant_ids":[],"id":"SCV000926774.0"}

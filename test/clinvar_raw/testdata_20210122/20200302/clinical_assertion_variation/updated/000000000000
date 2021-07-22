@@ -1,2 +1,0 @@
-{"id":"SCV000884146.0","descendant_ids":[],"clinical_assertion_id":"SCV000884146","subclass_type":"SimpleAllele","content":"{\"AttributeSet\":{\"Attribute\":{\"$\":\"NC_000001.10:g.11856378G\u003eA\",\"@Type\":\"HGVS\"}}}","child_ids":[],"variation_type":"Variation"}
-{"id":"SCV000604327.0","descendant_ids":[],"clinical_assertion_id":"SCV000604327","subclass_type":"SimpleAllele","content":"{\"AttributeSet\":{\"Attribute\":{\"$\":\"NC_000011.9:g.47364249G\u003eA\",\"@Type\":\"HGVS\"}}}","child_ids":[],"variation_type":"Variation"}
