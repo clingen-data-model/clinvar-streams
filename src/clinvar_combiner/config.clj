@@ -2,8 +2,8 @@
   (:require [clinvar-streams.util :as util]
             [jackdaw.serdes :as j-serde]))
 
-(def sqlite-db (util/get-env-required "SQLITE_DB"))
-(def snapshot-bucket (util/get-env-required "DX_CV_SNAPSHOT_BUCKET"))
+(def sqlite-db (when-not *compile-files* (util/get-env-required "SQLITE_DB")))
+(def snapshot-bucket (when-not *compile-files* (util/get-env-required "DX_CV_SNAPSHOT_BUCKET")))
 (def version-to-resume-from (System/getenv "DX_CV_COMBINER_SNAPSHOT_VERSION"))
 
 (defn app-config []
