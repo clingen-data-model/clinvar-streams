@@ -10,13 +10,13 @@
 
 (def db (atom {}))
 
-(def sql-root "src/clinvar_streams/storage/database_sqlite/sql")
+(def sql-resource-root "clinvar_streams/storage/database_sqlite/sql")
 
-(defn sql-path
+(defn sql-resource-path
   "Returns a cwd-rooted path for a sql filename under the project's sql directory.
   Throws exception if not found."
   [filename]
-  (.getPath (io/file sql-root filename)))
+  (str sql-resource-root "/" filename))
 
 (defn configure!
   "Configures the client to use the database at the provided db-path.
@@ -31,6 +31,13 @@
    (let [conn (jdbc/get-connection @db)]
      (.close conn))))
 
+(defn run-sql-resource [db-path filename]
+  (let [resource-path (sql-resource-path "initialize.sql")]
+    (let [sh-ret (sh "sqlite3" db-path :in (slurp (io/resource resource-path)))]
+      (if (not= 0 (:exit sh-ret))
+        (do ;(log/error (ex-info (str "Failed to run ") sh-ret))
+            (throw (ex-info (str "Failed to run " resource-path) sh-ret)))))))
+
 (defn init!
   "Initializes the database with given file path, relative to cwd.
   Will remove all prior contents, according to the contents of initialize.sql"
@@ -38,10 +45,7 @@
    (init! (util/get-env-required "SQLITE_DB")))
   ([db-path]
    (configure! db-path)
-   (let [sh-ret (sh "sqlite3" db-path (str ".read " (sql-path "initialize.sql")))]
-     (if (not= 0 (:exit sh-ret))
-       (do (log/error (ex-info "Failed to run initialize.sql" sh-ret))
-           (throw (ex-info "Failed to run initialize.sql" sh-ret)))))))
+   (run-sql-resource db-path "initialize.sql")))
 
 ;(defn query [[sql & args]]
 ;  (jdbc/query @db (cons sql args)))

@@ -20,32 +20,7 @@
   (let [partition-infos (.partitionsFor consumer topic-name)]
     (map #(TopicPartition. (.topic %) (.partition %)) partition-infos)))
 
-(defn make-consume-seq-batch
-  "Returns a lazy-seq over all the messages in a consumer, in batches received from poll()"
-  [consumer]
-  (letfn [(consume-batch [consumer]
-            (try (.commitSync ^KafkaConsumer consumer)
-                 (catch InterruptedException e
-                   (log/error "Got InterruptedException in commitSync():" e)))
-            (let [batch (try (jc/poll consumer (Duration/ofSeconds 5))
-                             (catch InterruptedException e
-                               (log/info "InterruptedException in poll() call:" e)))]
-              (if (not (empty? batch))
-                (lazy-cat [batch] (consume-batch consumer))
-                (lazy-cat [nil] (consume-batch consumer)))
-              ))]
-    (partial consume-batch consumer)) ; TODO
-  )
 
-(defn make-consume-fn-batch
-  [consumer]
-  (let [consumer-seq (atom ((make-consume-seq-batch consumer)))]
-    (letfn [(consume-fn []
-              (let [m (first @consumer-seq)]
-                ; rest is lazy
-                (reset! consumer-seq (rest @consumer-seq))
-                m))]
-      (partial consume-fn))))
 
 (defn make-consume-seq
   "Returns a function which when called returns a lazy-seq over all the messages
@@ -58,9 +33,9 @@
                    (log/error "Got InterruptedException in commitSync():" e)))
             (let [batch (try (jc/poll consumer (Duration/ofSeconds 5))
                              (catch InterruptedException e
-                                    (log/info "InterruptedException in poll() call:" e)
-                                    ;(throw e)
-                                    ))]
+                               (log/info "InterruptedException in poll() call:" e)
+                               ;(throw e)
+                               ))]
               (if (not (empty? batch))
                 (lazy-cat batch (consume-batch consumer))
                 (lazy-cat [nil] (consume-batch consumer)))
@@ -170,6 +145,38 @@
         (let [record-json (json/generate-string release-sentinel)]
           (produce-fn! record-json))))))
 
+(defn make-consume-seq-batch
+  "Returns a lazy-seq over all the messages in a consumer, in batches received from poll().
+  Items in returned seq are nil if no messages are available, or a seq of messages in a batch."
+  [consumer]
+  (letfn [(consume-batch [consumer]
+            (let [batch (jc/poll consumer (Duration/ofSeconds 5))]
+              (if (not (empty? batch))
+                (lazy-cat [batch] (consume-batch consumer))
+                (lazy-cat [nil] (consume-batch consumer)))
+              ))]
+    (lazy-seq (consume-batch consumer))))
+
+(defn make-consume-fn-batch
+  "Returns a function that yields the next unpolled message from the consumer on each call.
+  Retrieves no messages until first invoked. Commits consumer offsets after all the messages
+  in a polled batch have been yielded to the caller."
+  [consumer]
+  (let [message-seq
+        (atom (flatten
+                (for [batch (make-consume-seq-batch consumer)]
+                  (for [message batch]
+                    (do (when (= (:offset message) (:offset (nth batch (- (count batch) 1))))
+                          (log/info (format "Consuming last message in batch (%d), committing offsets"
+                                            (:offset message)))
+                          (.commitSync consumer))
+                        message)))))]
+    (letfn [(consume-fn []
+              (let [m (first @message-seq)]
+                (reset! message-seq (rest @message-seq))
+                m))]
+      (partial consume-fn))))
+
 (def run-streaming-mode-continue (atom true))
 (def run-streaming-mode-is-running (atom false))
 
@@ -181,7 +188,9 @@
   (reset! run-streaming-mode-is-running true)
   (log/info {:fn :run-streaming-mode})
   (while @run-streaming-mode-continue
+    (log/info "Checking for next message")
     (let [rec (consume-fn)]
+      (log/info {:rec rec})
       (if rec
         (do (log/info rec)
             (let [k (:key rec) v (:value rec)

@@ -7,7 +7,9 @@
             [clinvar-combiner.config :as config
              :refer [app-config topic-metadata kafka-config]]
             [clinvar-combiner.stream
-             :refer [make-consume-fn make-produce-fn
+             :refer [make-consume-fn
+                     make-consume-fn-batch
+                     make-produce-fn
                      run-streaming-mode]]
             [clinvar-combiner.snapshot :as snapshot]
             [clinvar-combiner.service]
@@ -62,7 +64,7 @@
   (clinvar-combiner.service/start)
   (write-map-to-file (kafka-config (app-config)) "kafka.properties")
   (log/set-level! :debug)
-  (db-client/init!)
+  (db-client/configure!)
 
   (let [consumer (jc/consumer (kafka-config (app-config)))
         producer (jc/producer (kafka-config (app-config)))
@@ -75,7 +77,8 @@
     (let [version-to-resume-from config/version-to-resume-from]
       (cond
         (empty? version-to-resume-from)
-        (seek-to-beginning consumer topic-name),
+        (do (db-client/init!)
+            (seek-to-beginning consumer topic-name)),
         (= "LOCAL" version-to-resume-from)
         (stream/set-consumer-to-db-offset
           consumer
@@ -83,7 +86,7 @@
         :else
         (snapshot/set-db-to-version! version-to-resume-from)))
 
-    (let [consume! (make-consume-fn consumer)
+    (let [consume! (make-consume-fn-batch consumer)
           produce! (make-produce-fn producer)]
       (run-streaming-mode consume! produce!))))
 
