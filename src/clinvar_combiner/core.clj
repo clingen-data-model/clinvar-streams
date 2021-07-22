@@ -76,18 +76,6 @@
   ;  (log/debug "in select-clinical-assertion " key (get-in (json/parse-string v true) [:content :entity_type]))
   (= "release_sentinel" (get-in (json/parse-string v true) [:content :entity_type])))
 
-(defn join-safe
-  [delim vec]
-  (loop [v vec s ""]
-    (if (empty? v) s
-                   (recur (rest v)
-                          (if (empty? s) (str (first v)) (str s delim (first v)))))))
-
-(defn join-non-empty
-  "Join only the non-empty terms of v with delim between each pair"
-  [delim vec]
-  (join-safe delim (filter #(not (empty? %)) vec)))
-
 (def previous-entity-type (atom ""))
 
 (defn to-db
@@ -105,26 +93,8 @@
     (sink/store-message val-map))
   [key val])
 
-
-;(defn topology [builder in-topic out-topic]
-;  "Builds a topology of operations to apply to a kstream from builder.
-;  Statefully applies the topology to builder, return value unused."
-;  (-> (j/kstream builder in-topic)
-;      ; Stash message in rocksdb
-;      (j/peek to-db)
-;      ; Filter to :entity_type release_sentinel
-;      (j/filter is-release-sentinel)
-;      (j/peek (fn [[k v]] (let [release-sentinel (json/parse-string v true)]
-;                            (sink/dirty-bubble release-sentinel))))
-;      ; TODO temporary filter for debugging
-;      ;(j/filter (fn [[k v]] (= "SCV000335826" (-> (json/parse-string v true) :content :id))))
-;      ; Transform clinical assertion using stored data
-;      ;(j/map build-clinical-assertion)
-;      ;(j/to out-topic)
-;      )
-;  )
-
 (defn write-map-to-file
+  "Writes map p to file with filename provided, in k=v format."
   [m filename]
   (with-open [writer (io/writer filename)]
     (doseq [[k v] m]
@@ -135,7 +105,8 @@
   [& args]
   (write-map-to-file (kafka-config (app-config)) "kafka.properties")
   (log/set-level! :debug)
-  (db-client/init! "clinvar.sqlite3")
+  (let [db-path (util/get-env-required "SQLITE_DB")]
+    (db-client/init! db-path))
 
   (let [consumer (jc/consumer (kafka-config (app-config)))
         producer (jc/producer (kafka-config (app-config)))
@@ -219,14 +190,12 @@
                         ; Mark entire database as clean. Look into whether this is the best way to do this.
                         ; If failure occurs part-way through processing one release's batch of messages, the
                         ; part sent will be sent again. Should be okay.
-                        (let [tables-to-clean [
-                                               "release_sentinels"
+                        (let [tables-to-clean ["release_sentinels"
                                                "submitter"
                                                "submission"
                                                "trait"
                                                "trait_set"
                                                "clinical_assertion_trait_set"
-                                               ;"clinical_assertion_trait_set_clinical_assertion_trait_ids"
                                                "clinical_assertion_trait"
                                                "gene"
                                                "variation"
@@ -235,11 +204,8 @@
                                                "rcv_accession"
                                                "clinical_assertion"
                                                "clinical_assertion_observation"
-                                               ;"clinical_assertion_observation_ids"
                                                "clinical_assertion_variation"
-                                               ;"clinical_assertion_variation_descendant_ids"
-                                               "trait_mapping"
-                                               ]]
+                                               "trait_mapping"]]
                           (doseq [table-name tables-to-clean]
                             (let [updated-count (jdbc/execute! @db-client/db [(format "update %s set dirty = 0 where dirty = 1" table-name)])]
                               (log/infof "Marked %s records in table %s as clean" updated-count table-name))))) ; end do
