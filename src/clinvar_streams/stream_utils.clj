@@ -26,6 +26,26 @@
    })
 
 
+(defn -download-input-topic-kv
+  [topic-name filename]
+
+  (let [download-writer (io/writer filename)
+        running (atom true)]
+    (with-open [consumer (jc/consumer (config/kafka-config config/app-config))]
+      ;(jc/subscribe consumer [{:topic-name topic-name}])
+      (jc/assign-all consumer [topic-name])
+      (jc/seek-to-beginning-eager consumer)
+      (while @running
+        (let [msgs (jc/poll consumer (Duration/ofSeconds 5000))]
+          (if (= 0 (count msgs))
+            (.flush download-writer))
+          ((log/info (format "Got %d messages" (count msgs)))
+           (doseq [msg msgs]
+             (.write download-writer
+                     (json/generate-string
+                       (select-keys msg [:key :value :offset :topic-name :partition])))))
+          )))))
+
 (defn get-max-offset [topic-name partition-num]
   (let [consumer (jc/consumer (config/kafka-config (assoc (app-config) :kafka-group (.toString (UUID/randomUUID)))))]
     (jc/subscribe consumer [{:topic-name topic-name}])
