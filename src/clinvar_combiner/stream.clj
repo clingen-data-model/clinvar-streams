@@ -164,6 +164,9 @@
   [consumer]
   (let [message-seq
         (atom (flatten
+                ; NOTE: to fix the problem noted below, we could just place this nested for loop
+                ; within the @run-streaming-mode-continue loop condition so that the entire batch
+                ; is guaranteed to be processed even if the loop condition is switched off.
                 (for [batch (make-consume-seq-batch consumer)]
                   (for [message batch]
                     (do (when (= (:offset message) (:offset (nth batch (- (count batch) 1))))
@@ -189,6 +192,12 @@
   (log/info {:fn :run-streaming-mode})
   (while @run-streaming-mode-continue
     (log/info "Checking for next message")
+    ; NOTE: Tristan review lazy-seq realization with commitSync.
+    ; If lazy-seq is realized to the next batch before the last message in the current
+    ; batch is actually received in this loop
+    ; with (consume-fn), that new offset will be committed as having been consumed, but
+    ; it won't be actually processed locally here if the @run-streaming-mode-continue loop
+    ; condition terminates the loop before proceeding past that committed offset.
     (let [rec (consume-fn)]
       (log/info {:rec rec})
       (if rec
