@@ -10,7 +10,8 @@
              :refer [make-consume-fn
                      make-consume-fn-batch
                      make-produce-fn
-                     run-streaming-mode]]
+                     run-streaming-mode
+                     run-streaming-mode-batch]]
             [clinvar-combiner.snapshot :as snapshot]
             [clinvar-combiner.service]
             [clinvar-streams.util :as util]
@@ -66,8 +67,8 @@
   (log/set-level! :debug)
   (db-client/configure!)
 
-  (let [consumer (jc/consumer (kafka-config (app-config)))
-        producer (jc/producer (kafka-config (app-config)))
+  (let [consumer (jc/consumer (dissoc (kafka-config (app-config)) "group.id"))
+        producer (jc/producer (dissoc (kafka-config (app-config)) "group.id"))
         topic-name (get-in topic-metadata [:input :topic-name])]
     (log/info "Subscribing to topic and assigning all partitions" (:input topic-metadata))
     (let [topic-partitions (stream/topic-partitions consumer topic-name)]
@@ -88,7 +89,7 @@
 
     (let [consume! (make-consume-fn-batch consumer)
           produce! (make-produce-fn producer)]
-      (run-streaming-mode consume! produce!))))
+      (run-streaming-mode-batch consume! produce!))))
 
 ;(def cli-options
 ;  [[nil "--mode" "Startup mode"

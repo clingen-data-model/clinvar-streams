@@ -37,7 +37,6 @@
    "compression.type" "gzip"
    "sasl.mechanism" "PLAIN"
    "request.timeout.ms" "20000"
-   "application.id" (:kafka-group opts)
    "group.id" (:kafka-group opts)
    "bootstrap.servers" (:kafka-host opts)
    "retry.backoff.ms" "500"

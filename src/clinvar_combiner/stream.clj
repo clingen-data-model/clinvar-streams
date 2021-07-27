@@ -157,23 +157,13 @@
               ))]
     (lazy-seq (consume-batch consumer))))
 
+
 (defn make-consume-fn-batch
   "Returns a function that yields the next unpolled message from the consumer on each call.
   Retrieves no messages until first invoked. Commits consumer offsets after all the messages
   in a polled batch have been yielded to the caller."
   [consumer]
-  (let [message-seq
-        (atom (flatten
-                ; NOTE: to fix the problem noted below, we could just place this nested for loop
-                ; within the @run-streaming-mode-continue loop condition so that the entire batch
-                ; is guaranteed to be processed even if the loop condition is switched off.
-                (for [batch (make-consume-seq-batch consumer)]
-                  (for [message batch]
-                    (do (when (= (:offset message) (:offset (nth batch (- (count batch) 1))))
-                          (log/info (format "Consuming last message in batch (%d), committing offsets"
-                                            (:offset message)))
-                          (.commitSync consumer))
-                        message)))))]
+  (let [message-seq (atom (make-consume-seq-batch consumer))]
     (letfn [(consume-fn []
               (let [m (first @message-seq)]
                 (reset! message-seq (rest @message-seq))
@@ -183,25 +173,20 @@
 (def run-streaming-mode-continue (atom true))
 (def run-streaming-mode-is-running (atom false))
 
-(defn run-streaming-mode
+(defn run-streaming-mode-batch
   "Runs the streaming mode of the combiner application. Reads messages by calling consume-fn
   with no args, stores messages locally, and sends appropriate output messages by calling
   produce-fn with a single message arg. Runs while run-streaming-mode-continue is truthy."
-  [consume-fn produce-fn]
+  [consume-fn! produce-fn!]
   (reset! run-streaming-mode-is-running true)
   (log/info {:fn :run-streaming-mode})
   (while @run-streaming-mode-continue
-    (log/info "Checking for next message")
-    ; NOTE: Tristan review lazy-seq realization with commitSync.
-    ; If lazy-seq is realized to the next batch before the last message in the current
-    ; batch is actually received in this loop
-    ; with (consume-fn), that new offset will be committed as having been consumed, but
-    ; it won't be actually processed locally here if the @run-streaming-mode-continue loop
-    ; condition terminates the loop before proceeding past that committed offset.
-    (let [rec (consume-fn)]
-      (log/info {:rec rec})
-      (if rec
-        (do (log/info rec)
+    (log/info "Checking for next batch")
+    (let [batch (consume-fn!)]
+      (log/info {:batch batch})
+      (if (not (empty? batch))
+        (doseq [rec batch]
+          (do
             (let [k (:key rec) v (:value rec)
                   offset (:offset rec)
                   partition-idx (:partition rec)
@@ -209,13 +194,13 @@
                   parsed-value (json/parse-string v true)]
               (sink/store-message parsed-value)
               (if (= "release_sentinel" (get-in parsed-value [:content :entity_type]))
-                (do (process-release-sentinel parsed-value produce-fn)
+                (do (process-release-sentinel parsed-value produce-fn!)
                     ; Mark entire database as clean. Look into whether this is the best way to do this.
                     ; If failure occurs part-way through processing one release's batch of messages, the
                     ; part sent will be sent again. Should be okay.
                     (mark-database-clean!)))
               ; Update offset in db to offset + 1 (next offset to read)
-              (db-client/update-offset topic-name partition-idx (inc offset))))
+              (db-client/update-offset topic-name partition-idx (inc offset)))))
         (log/info "No new messages"))))
   (log/info {:fn :run-streaming-mode :msg "Exiting streaming mode"})
   (reset! run-streaming-mode-is-running false))
