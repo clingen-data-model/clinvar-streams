@@ -21,5 +21,5 @@ MAINTAINER Kyle Ferriter <kferrite@broadinstitute.org>
 
 RUN apt update && apt install sqlite3
 COPY --from=builder /app/target/uberjar/clinvar-streams.jar /app/clinvar-streams.jar
-
+EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "/app/clinvar-streams.jar"]

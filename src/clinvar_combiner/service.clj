@@ -27,6 +27,7 @@
     {:io.pedestal.http/routes routes
      :io.pedestal.http/type :jetty
      :io.pedestal.http/join? false
+     :io.pedestal.http/host "0.0.0.0"
      :io.pedestal.http/port 8080}))
 
 (defn start []
