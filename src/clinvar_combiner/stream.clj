@@ -173,7 +173,7 @@
 (def run-streaming-mode-continue (atom true))
 (def run-streaming-mode-is-running (atom false))
 
-(defn run-streaming-mode-batch
+(defn run-streaming-mode
   "Runs the streaming mode of the combiner application. Reads messages by calling consume-fn
   with no args, stores messages locally, and sends appropriate output messages by calling
   produce-fn with a single message arg. Runs while run-streaming-mode-continue is truthy."
@@ -183,10 +183,10 @@
   (while @run-streaming-mode-continue
     (log/info "Checking for next batch")
     (let [batch (consume-fn!)]
-      (log/info {:batch batch})
       (if (not (empty? batch))
         (doseq [rec batch]
           (do
+            (log/debug {:rec rec})
             (let [k (:key rec) v (:value rec)
                   offset (:offset rec)
                   partition-idx (:partition rec)

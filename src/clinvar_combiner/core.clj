@@ -10,8 +10,7 @@
              :refer [make-consume-fn
                      make-consume-fn-batch
                      make-produce-fn
-                     run-streaming-mode
-                     run-streaming-mode-batch]]
+                     run-streaming-mode]]
             [clinvar-combiner.snapshot :as snapshot]
             [clinvar-combiner.service]
             [clinvar-streams.util :as util]
@@ -89,7 +88,7 @@
 
     (let [consume! (make-consume-fn-batch consumer)
           produce! (make-produce-fn producer)]
-      (run-streaming-mode-batch consume! produce!))))
+      (run-streaming-mode consume! produce!))))
 
 ;(def cli-options
 ;  [[nil "--mode" "Startup mode"
