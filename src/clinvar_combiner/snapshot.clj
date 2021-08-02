@@ -115,7 +115,7 @@
 (defn build-database
   [consumer partitions]
   (log/info {:fn :build-database :partitions partitions})
-  (let [consume! (stream/make-consume-fn consumer)
+  (let [consume! (stream/make-consume-fn-batch consumer)
         produce! (fn [_])
         consumer-thread (Thread. (partial stream/run-streaming-mode
                                           consume!
@@ -194,7 +194,8 @@
       ; Resume from start of topic
       (empty? version-to-resume-from)
       (do (log/info "No snapshot resume version specified, starting from scratch")
-          (set-db-to-version! version-to-resume-from)
+          (fs/delete config/sqlite-db)
+          (db-client/init!)
           (log/info "Seeking to beginning of topic")
           (jc/seek-to-beginning-eager consumer)),
 
@@ -218,4 +219,5 @@
         versioned-name (generate-versioned-archive-name (fs/base-name db-path) (db-client/latest-release-date))
         uploaded-blob-id (upload-file bucket archive versioned-name)]
     (log/info "Uploaded:" (BlobId->str uploaded-blob-id)))
+
   )

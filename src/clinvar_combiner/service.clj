@@ -4,7 +4,8 @@
             [io.pedestal.http :as http]
             [mount.core :refer [defstate]]
             [taoensso.timbre :as log])
-  (:import (java.time Duration)))
+  (:import (java.time Duration Instant)
+           (java.util Date)))
 
 (defn pre-stop [request]
   (log/info "In prestop hook handler")

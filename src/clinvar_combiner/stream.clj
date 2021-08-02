@@ -42,17 +42,17 @@
               ))]
     (partial consume-batch consumer)))
 
-(defn make-consume-fn
-  "Given a consumer, returns a function which on each invocation
-  returns the next message in the stream, and closes when there are no more."
-  [consumer]
-  (let [consumer-seq (atom ((make-consume-seq consumer)))]
-    (letfn [(consume-fn []
-              (let [m (first @consumer-seq)]
-                ; rest is lazy
-                (reset! consumer-seq (rest @consumer-seq))
-                m))]
-      (partial consume-fn))))
+;(defn make-consume-fn
+;  "Given a consumer, returns a function which on each invocation
+;  returns the next message in the stream, and closes when there are no more."
+;  [consumer]
+;  (let [consumer-seq (atom ((make-consume-seq consumer)))]
+;    (letfn [(consume-fn []
+;              (let [m (first @consumer-seq)]
+;                ; rest is lazy
+;                (reset! consumer-seq (rest @consumer-seq))
+;                m))]
+;      (partial consume-fn))))
 
 (defn make-produce-fn
   "Given a producer, returns a function which produces a single message argument
@@ -202,5 +202,5 @@
               ; Update offset in db to offset + 1 (next offset to read)
               (db-client/update-offset topic-name partition-idx (inc offset)))))
         (log/info "No new messages"))))
-  (log/info {:fn :run-streaming-mode :msg "Exiting streaming mode"})
-  (reset! run-streaming-mode-is-running false))
+  (reset! run-streaming-mode-is-running false)
+  (log/info {:fn :run-streaming-mode :msg "Exiting streaming mode"}))

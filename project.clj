@@ -26,6 +26,7 @@
                  :caught clojure.repl/pst}
   :main clinvar-streams.core
   :aot [clinvar-streams.core]
+  :resource-paths ["resources"]
   :target-path "target/%s"
   :auto-clean false
   :profiles {:uberjar {:uberjar-name "clinvar-streams.jar"

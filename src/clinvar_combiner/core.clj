@@ -7,8 +7,7 @@
             [clinvar-combiner.config :as config
              :refer [app-config topic-metadata kafka-config]]
             [clinvar-combiner.stream
-             :refer [make-consume-fn
-                     make-consume-fn-batch
+             :refer [make-consume-fn-batch
                      make-produce-fn
                      run-streaming-mode]]
             [clinvar-combiner.snapshot :as snapshot]
@@ -61,7 +60,6 @@
 (defn -main-streaming
   "Configure and start kafka application run-streaming-mode"
   [& args]
-  (clinvar-combiner.service/start)
   (write-map-to-file (kafka-config (app-config)) "kafka.properties")
   (log/set-level! :debug)
   (db-client/configure!)
@@ -76,13 +74,18 @@
 
     (let [version-to-resume-from config/version-to-resume-from]
       (cond
+        ; Start from scratch
         (empty? version-to-resume-from)
         (do (db-client/init!)
             (seek-to-beginning consumer topic-name)),
+
+        ; Start from local db version
         (= "LOCAL" version-to-resume-from)
         (stream/set-consumer-to-db-offset
           consumer
           (stream/topic-partitions consumer topic-name)),
+
+        ; Start from specific version
         :else
         (snapshot/set-db-to-version! version-to-resume-from)))
 
@@ -113,6 +116,9 @@
 (defn -main [& args]
   (let [mode (validate-mode (util/get-env-required "DX_CV_COMBINER_MODE"))]
     (log/info {:mode mode})
+    (mount.core/start #'clinvar-combiner.service/service)
     (case mode
       "snapshot" (clinvar-combiner.snapshot/-main args)
-      "stream" (-main-streaming args))))
+      "stream" (-main-streaming args)))
+  (log/info "Shutting down mount state")
+  (mount.core/stop))
