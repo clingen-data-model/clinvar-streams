@@ -21,7 +21,7 @@
     :key-serde (j-serde/string-serde)
     :value-serde (j-serde/string-serde)}
    :output
-   {:topic-name (when-not *compile-files* (util/get-env-required "DX_CV_COMBINER_INPUT_TOPIC"))
+   {:topic-name (when-not *compile-files* (util/get-env-required "DX_CV_COMBINER_OUTPUT_TOPIC"))
     :partition-count 1
     :replication-factor 3
     :key-serde (j-serde/string-serde)
