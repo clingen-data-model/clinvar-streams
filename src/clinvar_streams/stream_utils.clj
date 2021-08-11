@@ -9,7 +9,8 @@
             [clojure.java.io :as io]
             [clojure.string :as s]
             [clojure.java.jdbc :as jdbc]
-            [jackdaw.client :as jc])
+            [jackdaw.client :as jc]
+            [jackdaw.data :as jd])
   (:import [org.apache.kafka.streams KafkaStreams]
            [java.util Properties]
            [java.time Duration]
@@ -26,25 +27,7 @@
    })
 
 
-(defn -download-input-topic-kv
-  [topic-name filename]
 
-  (let [download-writer (io/writer filename)
-        running (atom true)]
-    (with-open [consumer (jc/consumer (config/kafka-config config/app-config))]
-      ;(jc/subscribe consumer [{:topic-name topic-name}])
-      (jc/assign-all consumer [topic-name])
-      (jc/seek-to-beginning-eager consumer)
-      (while @running
-        (let [msgs (jc/poll consumer (Duration/ofSeconds 5000))]
-          (if (= 0 (count msgs))
-            (.flush download-writer))
-          ((log/info (format "Got %d messages" (count msgs)))
-           (doseq [msg msgs]
-             (.write download-writer
-                     (json/generate-string
-                       (select-keys msg [:key :value :offset :topic-name :partition])))))
-          )))))
 
 (defn get-max-offset [topic-name partition-num]
   (let [consumer (jc/consumer (config/kafka-config (assoc (app-config) :kafka-group (.toString (UUID/randomUUID)))))]
@@ -80,3 +63,44 @@
 (defn topic-exists? [topic-name]
   "TODO"
   (let [consumer ()]))
+
+(defn -download-topic-kv
+  "Downloads messages from topic and saves them newline delimited in file-name.
+  Wipes prior contents of file-name."
+  [topic-name file-name]
+
+  (let [download-writer (io/writer file-name)
+        running (atom true)
+        max-offset (get-max-offset topic-name 0)]
+    (with-open [consumer (jc/consumer (config/kafka-config config/app-config))]
+      ;(jc/subscribe consumer [{:topic-name topic-name}])
+      (jc/assign-all consumer [topic-name])
+      (jc/seek-to-beginning-eager consumer)
+      (while @running
+        (let [msgs (jc/poll consumer (Duration/ofSeconds 5))]
+          (if (= 0 (count msgs))
+            (do (.flush download-writer)
+                (reset! running false))
+            (do (log/info (format "Got %d messages" (count msgs)))
+                (doseq [msg msgs]
+                  (.write download-writer
+                          (str (json/generate-string
+                                 (select-keys msg [:key :value :offset :topic-name :partition]))
+                               "\n"))))))))))
+
+(defn -upload-topic
+  [topic-name file-name]
+  (let []
+    (log/info "Reading file" file-name)
+    (with-open [file-rdr (io/reader file-name)
+                ;consumer (jc/consumer (config/kafka-config config/app-config))
+                producer (jc/producer (config/kafka-config config/app-config))]
+      (let [file-lines (line-seq file-rdr)]
+        (doseq [line file-lines]
+          (let [j (json/parse-string line true)
+                msg (assoc (select-keys j [:key :value :offset :topic-name :partition])
+                      :topic-name topic-name)]
+            (log/infof "Producing to %s key=%s value=%s" topic-name (:key msg) (:value msg))
+            (jc/send! producer (jd/map->ProducerRecord (dissoc msg :offset)))
+            )))
+      )))
