@@ -20,7 +20,7 @@
   (str sql-resource-root "/" filename))
 
 (defn run-sql-resource [db-path filename]
-  (let [resource-path (sql-resource-path "initialize.sql")]
+  (let [resource-path (sql-resource-path filename)]
     (let [sh-ret (sh "sqlite3" db-path :in (slurp (io/resource resource-path)))]
       (if (not= 0 (:exit sh-ret))
         (do                                                 ;(log/error (ex-info (str "Failed to run ") sh-ret))
