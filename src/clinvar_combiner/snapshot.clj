@@ -182,6 +182,12 @@
   (download-version version-to-resume-from config/sqlite-db)
   (db-client/init!))
 
+(defn -validate-env []
+  ; validate required env vars
+  (util/get-env-required "SQLITE_DB")
+  (util/get-env-required "DX_CV_SNAPSHOT_BUCKET")
+  (util/get-env-required "DX_CV_COMBINER_INPUT_TOPIC"))
+
 (defn -main [& args]
   (let [version-to-resume-from config/version-to-resume-from
         consumer (make-consumer)

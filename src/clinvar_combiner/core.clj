@@ -57,9 +57,16 @@
                0)))
   consumer)
 
+(defn -validate-env []
+  ; validate required env vars
+  (util/get-env-required "SQLITE_DB")
+  (util/get-env-required "DX_CV_COMBINER_INPUT_TOPIC")
+  (util/get-env-required "DX_CV_COMBINER_OUTPUT_TOPIC"))
+
 (defn -main-streaming
   "Configure and start kafka application run-streaming-mode"
   [& args]
+  (-validate-env)
   (write-map-to-file (kafka-config (app-config)) "kafka.properties")
   (log/set-level! :debug)
   (db-client/configure!)

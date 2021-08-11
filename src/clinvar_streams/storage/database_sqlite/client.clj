@@ -3,7 +3,8 @@
             [clojure.java.jdbc :as jdbc]
             [clojure.java.shell :refer :all]
             [taoensso.timbre :as log]
-            [clinvar-streams.util :as util])
+            [clinvar-streams.util :as util]
+            [clinvar-combiner.config :as config])
   (:import [java.io File]
            (java.sql PreparedStatement)
            (java.util Iterator)))
@@ -30,7 +31,7 @@
   Opens and closes a Connection, to verify that a connection could be established.
   If the database is empty, also initializes it."
   ([]
-   (configure! (util/get-env-required "SQLITE_DB")))
+   (configure! config/sqlite-db))
   ([db-path]
    ; non-core keys in db are passed as Properties to DriverManager/getConnection
    ; https://github.com/clojure/java.jdbc/blob/acffd9f5f216f8b8c1fc960c1d47b0b5feb56730/src/main/clojure/clojure/java/jdbc.clj#L271
@@ -47,7 +48,7 @@
   "Returns true if the db atom has been configured and the database tables have been initialized.
   Does not check to see if the schema matches that of initialize.sql."
   ([]
-   (initialized? (util/get-env-required "SQLITE_DB")))
+   (initialized? config/sqlite-db))
   ([db-path]
    (and (not (empty? @db))
         (= db-path (:subname @db))
@@ -62,7 +63,7 @@
   "Initializes the database with given file path, relative to cwd.
   Will remove all prior contents, according to the contents of initialize.sql"
   ([]
-   (init! (util/get-env-required "SQLITE_DB")))
+   (init! config/sqlite-db))
   ([db-path]
    (configure! db-path)
    (run-sql-resource db-path "initialize.sql")))

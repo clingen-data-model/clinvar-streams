@@ -7,6 +7,7 @@
             [clojure.data :refer [diff]]
             [clojure.core.async :as async :refer [>!! <!! poll!]]
             [clinvar-raw.core :as core]
+            [clinvar-raw.stream :as stream]
             [clinvar-streams.util :as util]))
 
 ;(deftest bucket-test
@@ -121,7 +122,7 @@
                                             :review_status "no assertion criteria provided",
                                             :interpretation_date_last_evaluated "2019-06-18",
                                             :version "1"}}}]
-      (let [actual-value (core/line-map-to-event (json/parse-string line true) entity-type datetime event-type)]
+      (let [actual-value (stream/line-map-to-event (json/parse-string line true) entity-type datetime event-type)]
         (is (= expected-value actual-value)
             (str "Expected did not match actual: "
                  (into [] (diff expected-value actual-value)))))
@@ -132,7 +133,7 @@
         file-list (map #(str "2020-04-01/" (name %) "/created/00000000") entity-types)]
     (testing "Test filtering file list based on entity-types"
       (doseq [entity-type entity-types]
-        (let [filtered (core/filter-files entity-type file-list)
+        (let [filtered (stream/filter-files entity-type file-list)
               path-seg (str "/" entity-type "/")]
           (is (util/match-every? path-seg filtered)
               (str "All entries should contain " path-seg))
@@ -141,12 +142,12 @@
           ))
       )
     (testing "Testing filter-files on non-existent entity-types"
-      (is (= [] (core/filter-files "fake-entity" file-list)))
+      (is (= [] (stream/filter-files "fake-entity" file-list)))
       )
     (testing "Testing filter-files on other path segments"
-      (is (= [] (core/filter-files "2020-04-01" file-list)))
-      (is (util/unordered-eq? file-list (core/filter-files "created" file-list)))
-      (is (= [] (core/filter-files "00000000" file-list)))
+      (is (= [] (stream/filter-files "2020-04-01" file-list)))
+      (is (util/unordered-eq? file-list (stream/filter-files "created" file-list)))
+      (is (= [] (stream/filter-files "00000000" file-list)))
       )
     )
   )
@@ -162,13 +163,13 @@
       (doseq [entity-type entity-types]
         (with-open [r (io/reader (str "test/clinvar_raw/resources/drop_files/created/good/" entity-type ".json"))]
           (let [expected-value (:processed-clinvar-drop ((keyword entity-type) drop-file-records))]
-            (core/process-clinvar-drop-file {:reader r
+            (stream/process-clinvar-drop-file {:reader r
                                              :entity-type entity-type
                                              :release_date release-date
                                              :event-type "created"
                                              :filter-field nil})
             (Thread/sleep 100)                              ; TODO put spin
-            (let [actual-value (<!! (async/into [] (async/take (count expected-value) core/producer-channel)))]
+            (let [actual-value (<!! (async/into [] (async/take (count expected-value) stream/producer-channel)))]
               (println actual-value)
               (is (= expected-value actual-value)
                   (str "Expected did not match actual: "
