@@ -41,6 +41,13 @@ drop table if exists trait_mapping;
 drop table if exists release_sentinels;
 drop table if exists release_sentinels_rules;
 
+drop table if exists topic_offsets;
+create table topic_offsets (
+    topic_name text,
+    partition int,
+    offset int,
+    primary key(topic_name, partition) on conflict replace
+);
 
 create table release_sentinels (
     release_date text,          -- 2020-10-15.0 2020-10-15.1

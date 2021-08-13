@@ -2,41 +2,71 @@
   (:require [clojure.java.io :as io]
             [clojure.java.jdbc :as jdbc]
             [clojure.java.shell :refer :all]
-            [taoensso.timbre :as log])
+            [taoensso.timbre :as log]
+            [clinvar-streams.util :as util]
+            [clinvar-combiner.config :as config])
   (:import [java.io File]
            (java.sql PreparedStatement)
            (java.util Iterator)))
 
 (def db (atom {}))
 
-(def sql-root "src/clinvar_streams/storage/database_sqlite/sql")
+(def sql-resource-root "clinvar_streams/storage/database_sqlite/sql")
 
-(defn sql-path
+(defn sql-resource-path
   "Returns a cwd-rooted path for a sql filename under the project's sql directory.
   Throws exception if not found."
   [filename]
-  (.getPath (io/file sql-root filename)))
+  (str sql-resource-root "/" filename))
+
+(defn run-sql-resource [db-path filename]
+  (let [resource-path (sql-resource-path filename)]
+    (let [sh-ret (sh "sqlite3" db-path :in (slurp (io/resource resource-path)))]
+      (if (not= 0 (:exit sh-ret))
+        (do                                                 ;(log/error (ex-info (str "Failed to run ") sh-ret))
+          (throw (ex-info (str "Failed to run " resource-path) sh-ret)))))))
 
 (defn configure!
   "Configures the client to use the database at the provided db-path.
-  Opens and closes a Connection, to verify that a connection could be established"
-  [db-path]
-  (reset! db {:classname    "org.sqlite.JDBC"
-              :subprotocol  "sqlite"
-              :subname      db-path
-              :foreign_keys "on"})                          ; foreign_keys=on sets PRAGMA foreign_keys=on
-  (let [conn (jdbc/get-connection @db)]
-    (.close conn)))
+  Opens and closes a Connection, to verify that a connection could be established.
+  If the database is empty, also initializes it."
+  ([]
+   (configure! config/sqlite-db))
+  ([db-path]
+   ; non-core keys in db are passed as Properties to DriverManager/getConnection
+   ; https://github.com/clojure/java.jdbc/blob/acffd9f5f216f8b8c1fc960c1d47b0b5feb56730/src/main/clojure/clojure/java/jdbc.clj#L271
+   (reset! db {:classname "org.sqlite.JDBC"
+               :subprotocol "sqlite"
+               :subname db-path
+               ; foreign_keys=on sets PRAGMA foreign_keys=on
+               :foreign_keys "on"
+               :synchronous "off"})
+   (let [conn (jdbc/get-connection @db)]
+     (.close conn))))
+
+(defn initialized?
+  "Returns true if the db atom has been configured and the database tables have been initialized.
+  Does not check to see if the schema matches that of initialize.sql."
+  ([]
+   (initialized? config/sqlite-db))
+  ([db-path]
+   (and (not (empty? @db))
+        (= db-path (:subname @db))
+        ; http://clojure-doc.org/articles/ecosystem/java_jdbc/using_ddl.html
+        (jdbc/with-db-metadata
+          [md @db]
+          (let [table-metas (jdbc/metadata-result
+                              (.getTables md nil nil "release_sentinels" (into-array ["TABLE" "VIEW"])))]
+            (not (empty? table-metas)))))))
 
 (defn init!
   "Initializes the database with given file path, relative to cwd.
   Will remove all prior contents, according to the contents of initialize.sql"
-  [db-path]
-  (configure! db-path)
-  (let [sh-ret (sh "sqlite3" db-path (str ".read " (sql-path "initialize.sql")))]
-    (if (not= 0 (:exit sh-ret))
-      (do (log/error (ex-info "Failed to run initialize.sql" sh-ret))
-          (throw (ex-info "Failed to run initialize.sql" sh-ret))))))
+  ([]
+   (init! config/sqlite-db))
+  ([db-path]
+   (configure! db-path)
+   (run-sql-resource db-path "initialize.sql")))
 
 ;(defn query [[sql & args]]
 ;  (jdbc/query @db (cons sql args)))
@@ -56,13 +86,29 @@
                       (recur (dec count)
                              (conj names (.getColumnName rs-meta (dec count))))))]
     (let [it (reify Iterator
-                    (next [this] (do (.next rs)
-                                     (into {} (map #(vector % (.getObject rs %)) col-names))))
-                    (hasNext [this] (not (or (.isLast rs) (.isAfterLast rs)))))
+               (next [this] (do (.next rs)
+                                (into {} (map #(vector % (.getObject rs %)) col-names))))
+               (hasNext [this] (not (or (.isLast rs) (.isAfterLast rs)))))
           it-seq (iterator-seq it)]
-      it-seq
-      )
-    ;(for [:when (not (.isAfterLast rs))]
-    ;  (into {} (map #(vector % (.getObject rs %)) col-names)))
-    ;(let [it (reify Iter)])
-    ))
+      it-seq)))
+
+(defn update-offset [topic-name partition-idx offset]
+  (log/debug {:fn :update-offset :offset offset :topic-name topic-name :partition-idx partition-idx})
+  (let [ret (jdbc/execute! @db ["insert into topic_offsets(topic_name, partition, offset) values(?, ?, ?)"
+                                topic-name partition-idx offset])]))
+
+(defn get-offset [topic-name partition-idx]
+  (log/debug {:fn :get-offset :topic-name topic-name :partition-idx partition-idx})
+  (let [ret (jdbc/query @db ["select offset from topic_offsets where topic_name = ? and partition = ?"
+                             topic-name partition-idx])
+        _ (log/debug {:ret ret})
+        offset (:offset (first ret))]
+    (log/debug {:fn :get-offset :offset offset})
+    offset))
+
+(defn latest-release-date
+  "Returns the latest date on a received release sentinel message."
+  []
+  (let [ret (jdbc/query @db ["select max(release_date) as m from release_sentinels"])]
+    (log/debug {:fn :latest-release-date :ret ret})
+    (:m (first ret))))

@@ -1,4 +1,4 @@
-(ns clinvar-combiner.db
+(ns clinvar-combiner.rocksdb
   (:require [taoensso.timbre :as log])
   (:import (org.rocksdb RocksDB RocksDBException Options)
            (java.lang String)))

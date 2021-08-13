@@ -4,94 +4,38 @@
             [clinvar-combiner.combiners.variation :as c-variation]
             [clinvar-combiner.combiners.clinical-assertion :as c-assertion]
             [clinvar-combiner.combiners.core :as c-core]
+            [clinvar-combiner.config :as config
+             :refer [app-config topic-metadata kafka-config]]
+            [clinvar-combiner.stream
+             :refer [make-consume-fn-batch
+                     make-produce-fn
+                     run-streaming-mode]]
+            [clinvar-combiner.snapshot :as snapshot]
+            [clinvar-combiner.service]
             [clinvar-streams.util :as util]
             [jackdaw.streams :as j]
             [jackdaw.serdes :as j-serde]
+            [jackdaw.client :as jc]
             [cheshire.core :as json]
             [taoensso.timbre :as log]
+            [clojure.pprint :refer [pprint]]
+            [clojure.tools.cli :as cli]
             [clojure.java.io :as io]
             [clojure.java.jdbc :as jdbc]
             [clojure.string :as s]
-            [jackdaw.client :as jc])
+            [clojure.spec.alpha :as spec]
+            [clinvar-combiner.stream :as stream])
   (:import [org.apache.kafka.streams KafkaStreams]
            [java.util Properties]
            [java.time Duration]
            (org.apache.kafka.common TopicPartition))
   (:gen-class))
 
-(defn app-config []
-  {:kafka-host "pkc-4yyd6.us-east1.gcp.confluent.cloud:9092"
-   :kafka-user (util/get-env-required "KAFKA_USER")
-   :kafka-password (util/get-env-required "KAFKA_PASSWORD")
-   :kafka-group (util/get-env-required "KAFKA_GROUP")
-   })
-
-(def topic-metadata
-  {:input
-   {;:topic-name "clinvar-raw"
-    :topic-name "clinvar-raw-testdata_20210302"
-    :partition-count 1
-    :replication-factor 3
-    :key-serde (j-serde/string-serde)
-    :value-serde (j-serde/string-serde)}
-   :output
-   {;:topic-name         "clinvar-combined"
-    :topic-name "clinvar-combined-testdata_20210302"
-    :partition-count 1
-    :replication-factor 3
-    :key-serde (j-serde/string-serde)
-    :value-serde (j-serde/string-serde)}})
-
-(defn kafka-config
-  "Expects, at a minimum, :kafka-user and :kafka-password in opts. "
-  [opts]
-  {"ssl.endpoint.identification.algorithm" "https"
-   "compression.type" "gzip"
-   "sasl.mechanism" "PLAIN"
-   "request.timeout.ms" "20000"
-   "application.id" (:kafka-group opts)
-   "group.id" (:kafka-group opts)
-   "bootstrap.servers" (:kafka-host opts)
-   "retry.backoff.ms" "500"
-   "security.protocol" "SASL_SSL"
-   "key.serializer" "org.apache.kafka.common.serialization.StringSerializer"
-   "value.serializer" "org.apache.kafka.common.serialization.StringSerializer"
-   "key.deserializer" "org.apache.kafka.common.serialization.StringDeserializer"
-   "value.deserializer" "org.apache.kafka.common.serialization.StringDeserializer"
-   "sasl.jaas.config" (str "org.apache.kafka.common.security.plain.PlainLoginModule required username=\""
-                           (:kafka-user opts) "\" password=\"" (:kafka-password opts) "\";")})
-
-
-(defn select-clinical-assertion
-  "Return true if the message is a clinical assertion
-  otherwise return nil"
-  [[key v]]
-  ;  (log/debug "in select-clinical-assertion " key (get-in (json/parse-string v true) [:content :entity_type]))
-  (= "clinical_assertion" (get-in (json/parse-string v true) [:content :entity_type])))
-
-(defn is-release-sentinel
-  "Return true if the message is a release sentinel
-  otherwise return nil"
-  [[^String key ^String v]]
-  ;  (log/debug "in select-clinical-assertion " key (get-in (json/parse-string v true) [:content :entity_type]))
-  (= "release_sentinel" (get-in (json/parse-string v true) [:content :entity_type])))
-
-(def previous-entity-type (atom ""))
-
-(defn to-db
-  ""
-  [[^String key ^String val]]
-  ; Put each message in rocksdb
-  (let [val-map (json/parse-string val true)]
-    ; Log entity-type changes for monitoring stream
-    ;(if (not (= @previous-entity-type (-> val-map :content :entity_type)))
-    ;  (do
-    ;    (log/debugf "entity-type changed from %s to %s\n" @previous-entity-type (-> val-map :content :entity_type))
-    ;    (reset! previous-entity-type (-> val-map :content :entity_type))))
-
-    ;(log/info "storing")
-    (sink/store-message val-map))
-  [key val])
+;(defn to-db
+;  "Writes an entry to the database for key and value. Delegates to appropriate handling in db module."
+;  [key value]
+;  (sink/store-message val-map)
+;  [key val])
 
 (defn write-map-to-file
   "Writes map p to file with filename provided, in k=v format."
@@ -100,114 +44,88 @@
     (doseq [[k v] m]
       (.write writer (str k "=" v "\n")))))
 
-(defn -main
-  "Construct topology and start kafka streams application"
+(defn seek-to-beginning [consumer topic-name]
+  (log/info {:fn :seek-to-beginning :consumer consumer :topic-name topic-name})
+  ;(jc/seek-to-beginning-eager consumer)
+  (jc/poll consumer (Duration/ofSeconds 5))
+  (let [assignment (jc/assignment consumer)]
+    (log/info {:assignment assignment})
+    (doseq [topic-partition assignment]
+      (jc/seek consumer (TopicPartition.
+                          (:topic-name topic-partition)
+                          (:partition topic-partition))
+               0)))
+  consumer)
+
+(defn -validate-env []
+  ; validate required env vars
+  (util/get-env-required "SQLITE_DB")
+  (util/get-env-required "DX_CV_COMBINER_INPUT_TOPIC")
+  (util/get-env-required "DX_CV_COMBINER_OUTPUT_TOPIC"))
+
+(defn -main-streaming
+  "Configure and start kafka application run-streaming-mode"
   [& args]
+  (-validate-env)
   (write-map-to-file (kafka-config (app-config)) "kafka.properties")
   (log/set-level! :debug)
-  (let [db-path (util/get-env-required "SQLITE_DB")]
-    (db-client/init! db-path))
+  (db-client/configure!)
 
-  (let [consumer (jc/consumer (kafka-config (app-config)))
-        producer (jc/producer (kafka-config (app-config)))
-        topic-name (get-in topic-metadata [:input :topic-name])
-        continue (atom true)
-        poll-interval-millis 5000]
-    (println (:input topic-metadata))
-    (log/info "Subscribing to topic" topic-name)
-    (jc/subscribe consumer [(:input topic-metadata)])
+  (let [consumer (jc/consumer (dissoc (kafka-config (app-config)) "group.id"))
+        producer (jc/producer (dissoc (kafka-config (app-config)) "group.id"))
+        topic-name (get-in topic-metadata [:input :topic-name])]
+    (log/info "Subscribing to topic and assigning all partitions" (:input topic-metadata))
+    (let [topic-partitions (stream/topic-partitions consumer topic-name)]
+      (apply (partial jc/assign consumer) topic-partitions))
+    ;(jc/subscribe consumer [(:input topic-metadata)])
 
-    (log/info "Seeking to beginning of input topic")
-    ;(jc/seek-to-beginning-eager consumer)
-    (jc/poll consumer (Duration/ofSeconds 5))
-    (jc/seek consumer (TopicPartition. topic-name 0) 0)
+    (let [version-to-resume-from config/version-to-resume-from]
+      (cond
+        ; Start from scratch
+        (empty? version-to-resume-from)
+        (do (db-client/init!)
+            (seek-to-beginning consumer topic-name)),
 
-    (log/info "Polling for messages")
-    (while @continue
-      (let [msgs (jc/poll consumer (Duration/ofMillis poll-interval-millis))]
-        (log/info "Poll loop")
-        (doseq [msg msgs]
-          (log/info msg)
-          (let [k (:key msg) v (:value msg)
-                kv [k v]]
-            (to-db kv)
-            (if (is-release-sentinel kv)
-              (let [release-sentinel (json/parse-string (second kv) true)
-                    sentinel-type (get-in release-sentinel [:content :sentinel_type])]
-                (cond (= "start" sentinel-type)
-                      (do (let [record-json (json/generate-string release-sentinel)]
-                            (log/info "Got start sentinel" record-json)
-                            (jc/produce! producer (:output topic-metadata) record-json)))
+        ; Start from local db version
+        (= "LOCAL" version-to-resume-from)
+        (stream/set-consumer-to-db-offset
+          consumer
+          (stream/topic-partitions consumer topic-name)),
 
-                      (= "end" sentinel-type)
-                      ; Flush non-SCVs
-                      ; sink/get-dirty returns lazy seq, avoid realizing it
-                      (do
-                        (doseq [record (c-core/get-dirty release-sentinel)]
-                          (let [record-json (json/generate-string record)]
-                            (log/info record-json)
-                            (jc/produce! producer (:output topic-metadata) record-json)))
+        ; Start from specific version
+        :else
+        (snapshot/set-db-to-version! version-to-resume-from)))
+
+    (let [consume! (make-consume-fn-batch consumer)
+          produce! (make-produce-fn producer)]
+      (run-streaming-mode consume! produce!))))
+
+;(def cli-options
+;  [[nil "--mode" "Startup mode"
+;    :default "streaming"
+;    :required "MODE"
+;    :validate [#(util/in? % ["streaming" "snapshot"])
+;               "#(util/in? % [\"streaming\" \"snapshot\"]"]]
+;   [nil "--resume-from" "Snapshot file version to resume from (each is tagged with its latest offset)"
+;    ;:default (System/getenv "DX_CV_COMBINER_SNAPSHOT_VERSION")
+;    :required "SNAPSHOTTED_OFFSET"
+;    :parse-fn #(Integer/parseInt %)
+;    :validate [#(<= 0 %)
+;               "#(<= 0 %)"]]
+;   ])
 
 
-                        ; Flush SCVs
-                        (let [scvs-to-flush (c-assertion/dirty-bubble-scv release-sentinel)]
-                          (log/info release-sentinel)
-                          (log/infof "Received %d messages to flush" (count scvs-to-flush))
-                          (doseq [clinical-assertion scvs-to-flush]
-                            (let [built-clinical-assertion (c-assertion/build-clinical-assertion clinical-assertion)
-                                  built-clinical-assertion (c-assertion/post-process-built-clinical-assertion built-clinical-assertion)
-                                  built-clinical-assertion-json (json/generate-string built-clinical-assertion)]
-                              (if (nil? (:id built-clinical-assertion))
-                                (throw (ex-info "assertion :id cannot be nil"
-                                                {:cause built-clinical-assertion-json})))
-                              (if (nil? (:release_date built-clinical-assertion))
-                                (throw (ex-info "assertion :release_date cannot be nil"
-                                                {:cause built-clinical-assertion-json})))
-                              (let [fpath (format "debug/SCV/%s/%s.json"
-                                                  (:release_date built-clinical-assertion)
-                                                  (:id built-clinical-assertion))]
-                                (io/make-parents fpath)
-                                (with-open [fwriter (io/writer fpath)]
-                                  (.write fwriter built-clinical-assertion-json)))
-                              (log/info built-clinical-assertion-json)
-                              ; Write message to output
-                              (jc/produce! producer (:output topic-metadata) built-clinical-assertion-json)
-                              )))
+(defn validate-mode [mode]
+  (spec/def ::validate-mode #(util/in? % ["snapshot" "stream"]))
+  (if (spec/valid? ::validate-mode mode)
+    mode (spec/explain ::validate-mode mode)))
 
-                        ; Write end release sentinel to output
-                        (let [record-json (json/generate-string release-sentinel)]
-                          (jc/produce! producer (:output topic-metadata) record-json))
-
-                        ; Temporary stop condition for testing data subset
-                        ; {:event_type "create", :release_date "2019-07-01", :content {:entity_type "release_sentinel", :clingen_version 0, :sentinel_type "end", :release_tag "clinvar-2019-07-01", :rules [], :source "clinvar", :reason "ClinVar Upstream Release 2019-07-01", :notes nil}}
-                        ;(if true
-                        ;  (if (and (= "2019-10-01" (:release_date release-sentinel))
-                        ;           ;(= "2019-07-01" (:release_date release-sentinel))
-                        ;           (= "end" (get-in release-sentinel [:content :sentinel_type])))
-                        ;    (do (log/info "Stopping loop")
-                        ;        (reset! continue false))))
-
-                        ; Mark entire database as clean. Look into whether this is the best way to do this.
-                        ; If failure occurs part-way through processing one release's batch of messages, the
-                        ; part sent will be sent again. Should be okay.
-                        (let [tables-to-clean ["release_sentinels"
-                                               "submitter"
-                                               "submission"
-                                               "trait"
-                                               "trait_set"
-                                               "clinical_assertion_trait_set"
-                                               "clinical_assertion_trait"
-                                               "gene"
-                                               "variation"
-                                               "gene_association"
-                                               "variation_archive"
-                                               "rcv_accession"
-                                               "clinical_assertion"
-                                               "clinical_assertion_observation"
-                                               "clinical_assertion_variation"
-                                               "trait_mapping"]]
-                          (doseq [table-name tables-to-clean]
-                            (let [updated-count (jdbc/execute! @db-client/db [(format "update %s set dirty = 0 where dirty = 1" table-name)])]
-                              (log/infof "Marked %s records in table %s as clean" updated-count table-name))))) ; end do
-                      )                                     ; end if end sentinel
-                ))))))))
+(defn -main [& args]
+  (let [mode (validate-mode (util/get-env-required "DX_CV_COMBINER_MODE"))]
+    (log/info {:mode mode})
+    (mount.core/start #'clinvar-combiner.service/service)
+    (case mode
+      "snapshot" (clinvar-combiner.snapshot/-main args)
+      "stream" (-main-streaming args)))
+  (log/info "Shutting down mount state")
+  (mount.core/stop))

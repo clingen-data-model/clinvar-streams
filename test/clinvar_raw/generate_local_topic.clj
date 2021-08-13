@@ -9,6 +9,7 @@ Usage from REPL:
 "
 (ns clinvar-raw.generate-local-topic
   (:require [clinvar-raw.core :as raw-core]
+            [clinvar-raw.stream :as stream]
             [clinvar-raw.config :as raw-config]
             [clojure.java.io :as io]
             [clojure.string :as s]
@@ -93,7 +94,7 @@ Usage from REPL:
 (defn process-local-drop-messages
   [drop-messages]
   (doseq [msg drop-messages]
-    (raw-core/process-clinvar-drop msg :storage-protocol "file://")
+    (stream/process-clinvar-drop msg :storage-protocol "file://")
     ))
 
 (defn chan-get-available!
@@ -125,7 +126,7 @@ Usage from REPL:
   (with-open [producer (jc/producer producer-config)]
     (doseq [msg msgs]
       (log/info "Uploading" (json/generate-string msg))
-      (raw-core/send-update-to-exchange producer topic-name msg)
+      (stream/send-update-to-exchange producer topic-name msg)
       ;(jc/send! producer (jd/map->ProducerRecord jackdaw-message))
       )
     ))
@@ -163,20 +164,20 @@ Usage from REPL:
                          (assoc :storage-protocol "file://")
                          )
           kafka-config (cfg/kafka-config app-config)]
-      (reset! raw-core/send-update-to-exchange-counter 0)
+      (reset! stream/send-update-to-exchange-counter 0)
       (.start (Thread. (partial
-                         raw-core/process-drop-messages app-config)))
+                         stream/process-drop-messages app-config)))
       (.start (Thread. (partial
-                         raw-core/send-producer-messages app-config kafka-config)))
+                         stream/send-producer-messages app-config kafka-config)))
       (.start (Thread. (partial
-                         raw-core/listen-for-clinvar-drop app-config kafka-config)))
+                         stream/listen-for-clinvar-drop app-config kafka-config)))
 
       (log/info "Waiting for " (count jackdaw-messages)
                 " to be sent to output topic" clinvar-raw-topic)
-      (while (not= (:value @raw-core/last-received-clinvar-drop)
+      (while (not= (:value @stream/last-received-clinvar-drop)
                    (json/generate-string (:value (last jackdaw-messages))))
-        (log/infof "Sent %d messages so far" @raw-core/send-update-to-exchange-counter)
-        (log/info "Last drop received" @raw-core/last-received-clinvar-drop)
+        (log/infof "Sent %d messages so far" @stream/send-update-to-exchange-counter)
+        (log/info "Last drop received" @stream/last-received-clinvar-drop)
         (Thread/sleep 3000))
 
       ; Probably not necessary
@@ -184,8 +185,8 @@ Usage from REPL:
       (log/info "Waiting 10 seconds")
       (Thread/sleep 10000)
 
-      (reset! raw-core/listening-for-drop false)
-      (async/close! raw-core/producer-channel)
+      (reset! stream/listening-for-drop false)
+      (async/close! stream/producer-channel)
       )
 
     ))
