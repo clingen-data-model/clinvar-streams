@@ -208,7 +208,7 @@
       ; Resume from whatever the local state is
       (= "LOCAL" version-to-resume-from)
       (do (log/info "Resuming from latest local snapshot")
-          (db-client/configure!)
+          (db-client/configure-ensure-init!)
           (stream/set-consumer-to-db-offset consumer partitions)),
 
       ; Wipe local state and resume from a remote snapshot

@@ -44,6 +44,15 @@
    (let [conn (jdbc/get-connection @db)]
      (.close conn))))
 
+(defn init!
+  "Initializes the database with given file path, relative to cwd.
+  Will remove all prior contents, according to the contents of initialize.sql"
+  ([]
+   (init! config/sqlite-db))
+  ([db-path]
+   (configure! db-path)
+   (run-sql-resource db-path "initialize.sql")))
+
 (defn initialized?
   "Returns true if the db atom has been configured and the database tables have been initialized.
   Does not check to see if the schema matches that of initialize.sql."
@@ -59,14 +68,13 @@
                               (.getTables md nil nil "release_sentinels" (into-array ["TABLE" "VIEW"])))]
             (not (empty? table-metas)))))))
 
-(defn init!
-  "Initializes the database with given file path, relative to cwd.
-  Will remove all prior contents, according to the contents of initialize.sql"
+(defn configure-ensure-init!
   ([]
-   (init! config/sqlite-db))
+   (configure-ensure-init! config/sqlite-db))
   ([db-path]
    (configure! db-path)
-   (run-sql-resource db-path "initialize.sql")))
+   (if (not (initialized? db-path))
+     (init! db-path))))
 
 ;(defn query [[sql & args]]
 ;  (jdbc/query @db (cons sql args)))

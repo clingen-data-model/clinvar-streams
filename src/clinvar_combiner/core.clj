@@ -69,7 +69,7 @@
   (-validate-env)
   (write-map-to-file (kafka-config (app-config)) "kafka.properties")
   (log/set-level! :debug)
-  (db-client/configure!)
+  (db-client/configure-ensure-init!)
 
   (let [consumer (jc/consumer (dissoc (kafka-config (app-config)) "group.id"))
         producer (jc/producer (dissoc (kafka-config (app-config)) "group.id"))

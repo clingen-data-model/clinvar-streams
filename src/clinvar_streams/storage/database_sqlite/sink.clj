@@ -80,7 +80,7 @@
 
 ; Check for primary key violation exception, log warning, run again with 'insert or replace'
 (defn -assert-insert
-  [{:keys [table-name type-map value-map]}]
+  [{:keys [table-name type-map value-map on-conflict-replace]}]
   (let [sql (format "insert into %s(%s) values(%s)"
                     table-name
                     (s/join "," (into [] (map #(name %) (keys type-map))))
@@ -343,14 +343,25 @@
                :protein_changes :string
                :child_ids :string
                :descendant_ids :string}
+        descendant-types {:release_date :string
+                          :variation_id :string
+                          :descendant_id :string}
         values (merge (select-keys variation (keys types))
                       {:dirty 1
                        :protein_changes (json/generate-string (:protein_changes variation))
                        :child_ids (json/generate-string (:child_ids variation))
-                       :descendant_ids (json/generate-string (:descendant_ids variation))})]
+                       :descendant_ids (json/generate-string (:descendant_ids variation))})
+        descendant-values (map #(identity {:release_date (:release_date variation)
+                                           :variation_id (:id variation)
+                                           :descendant_id %})
+                               (:descendant_ids variation))]
     (assert-insert {:table-name "variation"
                     :type-map types
-                    :value-map values})))
+                    :value-map values})
+    (doseq [v descendant-values]
+      (assert-insert {:table-name "variation_descendant_ids"
+                      :type-map descendant-types
+                      :value-map v}))))
 
 (defn store-gene-association
   [gene-association]

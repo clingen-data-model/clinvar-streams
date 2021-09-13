@@ -206,14 +206,15 @@ create table variation (
 --    , foreign key(variation_id, release_date) references variation(id, release_date) on delete cascade
 ----    , foreign key(variation_child_id, release_date) references variation(id, release_date) on delete cascade
 --);
----- part of variation
---create table variation_descendant_ids (
+-- part of variation
+-- create table variation_descendant_ids (
 --    release_date text,
 --    variation_id text,
---    variation_descendant_id text
---    , foreign key(variation_id, release_date) references variation(id, release_date) on delete cascade
-----    , foreign key(variation_descendant_id) references variation(id) on delete cascade
---);
+--    descendant_id text
+-- --    descendant_release_date text
+-- --    , foreign key(variation_id, release_date) references variation(id, release_date) on delete cascade
+-- -- --    , foreign key(variation_descendant_id) references variation(id) on delete cascade
+-- );
 create table gene_association (
     release_date text,
     dirty int,
