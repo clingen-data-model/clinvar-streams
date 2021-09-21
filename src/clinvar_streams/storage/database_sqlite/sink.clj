@@ -358,10 +358,11 @@
     (assert-insert {:table-name "variation"
                     :type-map types
                     :value-map values})
-    (doseq [v descendant-values]
-      (assert-insert {:table-name "variation_descendant_ids"
-                      :type-map descendant-types
-                      :value-map v}))))
+    (comment
+      (doseq [v descendant-values]
+        (assert-insert {:table-name "variation_descendant_ids"
+                        :type-map descendant-types
+                        :value-map v})))))
 
 (defn store-gene-association
   [gene-association]

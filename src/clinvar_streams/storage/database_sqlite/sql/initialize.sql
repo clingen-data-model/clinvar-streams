@@ -197,6 +197,19 @@ create table variation (
     descendant_ids text, -- JSON serialized array
     primary key(id, release_date) on conflict replace
 );
+
+drop view if exists variation_latest;
+create view variation_latest as
+select *
+from variation a
+where a.release_date =
+    (select release_date
+    from variation
+    where id = a.id
+    order by release_date desc
+    limit 1);
+
+
 ---- descendant and child ids exist, but maybe not in this release changeset
 ---- part of variation
 --create table variation_child_ids (
@@ -228,6 +241,18 @@ create table gene_association (
 --    , foreign key(variation_id) references variation(id) on delete cascade
 --    , foreign key(gene_id) references gene(id) on delete cascade
 );
+
+drop view if exists gene_association_latest;
+create view gene_association_latest as
+select *
+from gene_association a
+where a.release_date =
+      (select release_date
+       from gene_association
+       where variation_id = a.variation_id
+         and gene_id = a.gene_id
+       order by release_date desc
+       limit 1);
 
 create table variation_archive (
     release_date text,

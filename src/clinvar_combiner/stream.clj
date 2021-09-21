@@ -55,7 +55,7 @@
 ;      (partial consume-fn))))
 
 (defn make-produce-fn
-  "Given a producer, returns a function which produces a single message argument
+  "Given a producer, returns a function which produces a single string message argument
   to the output topic configured in `topic-metadata`."
   [producer]
   (letfn [(produce-fn [msg]

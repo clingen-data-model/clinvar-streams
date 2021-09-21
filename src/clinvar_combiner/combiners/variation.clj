@@ -51,7 +51,7 @@
                     (letfn [(remove-unnecessary-keys [variation]
                               (dissoc variation :child_ids :clinical_assertion_id :descendant_ids))
                             (add-children-fn [variation]
-                              (log/debugf "variation: %s child_ids: %s" (:id variation) (:child_ids variation))
+                              (log/debugf "variation: %s child_ids: %s" variation (:child_ids variation))
                               (let [child-ids (:child_ids variation)]
                                 (let [variation (remove-unnecessary-keys variation)]
                                   (if child-ids
