@@ -72,7 +72,7 @@
                  (let [col-name-kw (map keyword col-names)]
                    ;(log/info {:col-names col-name-kw})
                    ;(log/info {:col-values col-values})
-                   (into {} (map list col-name-kw col-values)))))]
+                   (into {} (map vector col-name-kw col-values)))))]
        (reify Iterator
          (next [this]
            (if (.isBeforeFirst rs)
@@ -113,9 +113,10 @@
          conn (jdbc/get-connection @db-client/db)
          ps (.prepareStatement conn sql)
          rs (.executeQuery ps)]
-     (resultset-iterator rs {:close-fn #(do (.close rs)
-                                            (.close ps)
-                                            (.close conn))}))))
+     (iterator-seq
+       (resultset-iterator rs {:close-fn #(do (.close rs)
+                                              (.close ps)
+                                              (.close conn))})))))
 
 (def root-variations-sql
   "select v.id, v.descendant_ids
@@ -142,19 +143,21 @@
             ;; Return an iterator of all variations that are dirty via themself or descendants or gene association
             ;; only the most recent can ever be dirty so don't bother checking for latest release_date
             (let [s (str
-                      "select distinct v.id, v.descendant_ids "
-                      "from variation v "
-                      "left join variation vd "
-                      "on v.descendant_ids like ('%\"' || vd.id || '\"%') "
-                      "where v.dirty = 1 or vd.dirty = 1 "
-                      "and "
-                      "  (select descendant_ids  "
-                      "   from (select * from variation vmax where release_date = "
-                      "         (select release_date from variation where id = vmax.id "
-                      "          order by release_date limit 1))"
-                      "   v2 where order by release_date limit 1)")
+                      "select v.* from variation_latest v
+                      where (
+                          -- either the variation or a descendant is dirty
+                          v.dirty = 1
+                          or
+                          exists (select * from variation_latest vd
+                                  where v.descendant_ids like ('%\"' || vd.id || '\"%')))
+                        -- exclude those which are descendants of other variations
+                        and not exists
+                          (select descendant_ids
+                           from variation_latest
+                           where descendant_ids like ('%\"' || v.id || '\"%'))
+                      order by v.id asc")
                   rs-iterator (execute-to-rs-iterator! s [])]
-              rs-iterator))
+              (iterator-seq rs-iterator)))
           (add-variation-gene-association [variation]
             (let [gene-association-sql (str
                                          "select * from gene_association ga "
@@ -191,7 +194,13 @@
             (->> (get-dirty-root-variations)
                  (map add-variation-gene-association)
                  (map #(cons % (get-variation-descendants %)))
+                 (map (fn[%] (log/info %) %))
                  (map variation-list-to-compound)
+                 (map (fn [%] (if (< 1 (count %))
+                                (throw (ex-info "Multiple records returned from variation-list-to-compound"
+                                                {:value %}))
+                                (first %))))
+                 (map (fn[%] (log/info (into [] %)) %))
                  ))]
     (get-variation)))
 
