@@ -118,26 +118,6 @@
                                               (.close ps)
                                               (.close conn))})))))
 
-(def root-variations-sql
-  "select v.id, v.descendant_ids
-  from variation v
-  left join variation vd
-  on v.descendant_ids like ('%\"' || vd.id || '\"%')
-  where (v.dirty = 1 or vd.dirty = 1)
-  and
-    not exists
-    -- and most-recent descendant_ids which matches the current v.id
-    (select descendant_ids from
-       -- descendant ids for most recent of all variations
-       (select descendant_ids from variation vmax
-        where release_date = (select release_date from variation where id = vmax.id
-                              order by release_date limit 1))
-     where descendant_ids like ('%\"' || v.id || '\"%')
-    )
-  and v.release_date = (select max(release_date)
-                        from variation where id = v.id)
-  ")
-
 (defn get-dirty-variations []
   (letfn [(get-dirty-root-variations []
             ;; Return an iterator of all variations that are dirty via themself or descendants or gene association
@@ -160,14 +140,9 @@
               (iterator-seq rs-iterator)))
           (add-variation-gene-association [variation]
             (let [gene-association-sql (str
-                                         "select * from gene_association ga "
+                                         "select * from gene_association_latest ga "
                                          "where ga.variation_id = ? "
-                                         "and ga.release_date = "
-                                         " (select max(release_date) "
-                                         "  from gene_association "
-                                         "  where variation_id = ga.variation_id "
-                                         "  and gene_id = ga.gene_id) "
-                                         "and event_type <> 'delete'")
+                                         "and ga.event_type <> 'delete'")
                   gene-associations (query @db-client/db
                                            [gene-association-sql
                                             (:id variation)])]
@@ -178,11 +153,8 @@
             (let [descendant-ids (json/parse-string (:descendant_ids parent-variation))
                   in-clause (str "v.id in (" (s/join ", " descendant-ids) ") ")
                   sql (str
-                        "select v.* from variation v "
-                        "where v.release_date = "
-                        "  (select max(release_date) "
-                        "   from variation where id = v.id) "
-                        "and event_type <> 'delete' "
+                        "select v.* from variation_latest v "
+                        "where event_type <> 'delete' "
                         "and (" in-clause ")")
                   rs-iterator (execute-to-rs-iterator! sql [])]
               (iterator-seq rs-iterator)))
