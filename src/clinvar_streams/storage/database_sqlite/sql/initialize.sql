@@ -185,7 +185,7 @@ create table variation (
     release_date text,
     dirty int,
     event_type text,
-    id int,
+    id text,
     name text,
     variation_type text,
     subclass_type text, -- SimpleAllele|Haplotype|Genotype

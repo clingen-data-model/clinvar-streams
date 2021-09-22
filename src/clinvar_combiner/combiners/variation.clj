@@ -12,6 +12,7 @@
   Returns a vector of root variations (those which are not children of any others)."
   [variations]
   (let [variations (filter #(not (nil? %)) variations)]
+    (log/trace {:fn :variation-list-to-compound :variations variations})
     (if (= 0 (count variations))
       []
       (let [variations (map (fn [v] (let [child-ids (into [] (json/parse-string (:child_ids v)))]
