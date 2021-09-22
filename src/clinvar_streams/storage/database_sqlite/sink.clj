@@ -80,7 +80,7 @@
 
 ; Check for primary key violation exception, log warning, run again with 'insert or replace'
 (defn -assert-insert
-  [{:keys [table-name type-map value-map on-conflict-replace]}]
+  [{:keys [table-name type-map value-map]}]
   (let [sql (format "insert into %s(%s) values(%s)"
                     table-name
                     (s/join "," (into [] (map #(name %) (keys type-map))))
