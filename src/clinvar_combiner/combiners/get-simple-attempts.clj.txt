@@ -1,0 +1,47 @@
+
+;(defn get-simple-recur
+;  "Returns a stateful iterator function which on each call returns the `next` record"
+;  [table-name limit offset]
+;  (let [;ct (:ct (first (jdbc/query @db-client/db
+;        ;                           [(format "select count(*) as ct from %s where dirty = 1" table-name)])))
+;        s (str (format "select * from %s where dirty = 1 " table-name) " limit %s offset %s ")
+;        s-batch (format s limit offset)]
+;    (let [rs (jdbc/query @db-client/db [s-batch])]
+;      (if (not= 0 (count rs))
+;        (lazy-cat rs (get-simple-recur table-name limit (+ offset (count rs))))
+;        rs))))
+;
+;(defn get-simple-iterator
+;  [table-name]
+;  (let [s (atom (get-simple-recur table-name 10000 0))]
+;    (letfn [(s-iter []
+;              (let [v (first @s)]
+;                (reset! s (drop 1 @s))
+;                v))]
+;      s-iter)
+;    ))
+
+;(defn terminal-seq
+;  "Turns seq into a seq which calls f with no args when it is realized."
+;  [s f]
+;
+;  ; Turn s into seq of functions each returning an element,
+;  ; but last one calls f
+;  (let [s-fns (map (fn [elem] (fn [] elem)) s)
+;        with-f (concat s-fns [f])
+;        called (map #(%) with-f)
+;        without-f (drop-last called)]
+;    without-f))
+
+;(defn get-simple-cursor
+;  "Returns a lazy seq over a ResultSet cursor across all dirty records of `table-name`.
+;  Auto-closes the connection, resultset, preparedstatement upon realization of the last element in the seq."
+;  [table-name]
+;  (let [sql (format (str "select * from %s "
+;                         "where dirty = 1 ")
+;                    table-name)
+;        conn (jdbc/get-connection @db-client/db)
+;        ps (.prepareStatement conn sql)
+;        rs (.executeQuery ps)
+;        rs-seq (jdbc/result-set-seq rs)]
+;    rs-seq))
