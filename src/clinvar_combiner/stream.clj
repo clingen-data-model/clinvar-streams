@@ -112,16 +112,16 @@
       ; Flush non-SCVs
       ; sink/get-dirty returns lazy seq, avoid realizing it
       (do
+        (log/info {:fn :process-release-sentinel :msg "Flushing release" :value release-sentinel})
         (doseq [record (c-core/get-dirty release-sentinel)]
           (let [record-json (json/generate-string record)]
-            (log/info record-json)
+            (log/info {:fn :process-release-sentinel :msg "Producing message" :value record-json})
             (produce-fn! record-json)))
 
         ; Flush SCVs
-        (let [scvs-to-flush (c-assertion/dirty-bubble-scv release-sentinel)]
-          (log/info release-sentinel)
-          (log/infof "Received %d messages to flush" (count scvs-to-flush))
-          (doseq [clinical-assertion scvs-to-flush]
+        (let []
+          ;(log/infof "Received %d messages to flush" (count scvs-to-flush))
+          (doseq [clinical-assertion (c-assertion/dirty-bubble-scv release-sentinel)]
             (let [built-clinical-assertion (c-assertion/build-clinical-assertion clinical-assertion)
                   built-clinical-assertion (c-assertion/post-process-built-clinical-assertion built-clinical-assertion)
                   built-clinical-assertion-json (json/generate-string built-clinical-assertion)]
@@ -143,6 +143,7 @@
 
         ; Write end release sentinel to output
         (let [record-json (json/generate-string release-sentinel)]
+          (log/info {:fn :process-release-sentinel :msg "Producing message" :value record-json})
           (produce-fn! record-json))))))
 
 (defn make-consume-seq-batch
@@ -186,7 +187,7 @@
       (if (not (empty? batch))
         (doseq [rec batch]
           (do
-            (log/debug {:rec rec})
+            ;(log/debug {:rec rec})
             (let [k (:key rec) v (:value rec)
                   offset (:offset rec)
                   partition-idx (:partition rec)
@@ -198,7 +199,8 @@
                     ; Mark entire database as clean. Look into whether this is the best way to do this.
                     ; If failure occurs part-way through processing one release's batch of messages, the
                     ; part sent will be sent again. Should be okay.
-                    (mark-database-clean!)))
+                    (if (= "end" (:sentinel_type parsed-value))
+                      (mark-database-clean!))))
               ; Update offset in db to offset + 1 (next offset to read)
               (db-client/update-offset topic-name partition-idx (inc offset)))))
         (log/info "No new messages"))))
