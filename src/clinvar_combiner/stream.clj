@@ -131,13 +131,13 @@
               (if (nil? (:release_date built-clinical-assertion))
                 (throw (ex-info "assertion :release_date cannot be nil"
                                 {:cause built-clinical-assertion-json})))
-              (let [fpath (format "debug/SCV/%s/%s.json"
-                                  (:release_date built-clinical-assertion)
-                                  (:id built-clinical-assertion))]
-                (io/make-parents fpath)
-                (with-open [fwriter (io/writer fpath)]
-                  (.write fwriter built-clinical-assertion-json)))
-              (log/info built-clinical-assertion-json)
+              (comment (let [fpath (format "debug/SCV/%s/%s.json"
+                                           (:release_date built-clinical-assertion)
+                                           (:id built-clinical-assertion))]
+                         (io/make-parents fpath)
+                         (with-open [fwriter (io/writer fpath)]
+                           (.write fwriter built-clinical-assertion-json))))
+              (log/info {:fn :process-release-sentinel :msg "Producing message" :value built-clinical-assertion-json})
               ; Write message to output
               (produce-fn! built-clinical-assertion-json))))
 
@@ -203,6 +203,6 @@
                       (mark-database-clean!))))
               ; Update offset in db to offset + 1 (next offset to read)
               (db-client/update-offset topic-name partition-idx (inc offset)))))
-        (log/info "No new messages"))))
+        (log/info {:fn :run-streaming-mode :msg "No new messages"}))))
   (reset! run-streaming-mode-is-running false)
   (log/info {:fn :run-streaming-mode :msg "Exiting streaming mode"}))
