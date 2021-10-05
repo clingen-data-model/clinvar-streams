@@ -5,12 +5,22 @@
              :refer [variation-list-to-compound]]
             [clinvar-streams.util :refer [obj-max assoc-if set-union-all]]
             [cheshire.core :as json]
-            [clojure.java.jdbc :as jdbc :refer :all]
+            [clojure.java.jdbc :as jdbc]
             [taoensso.timbre :as log]
             [clojure.string :as s])
   (:import (java.sql PreparedStatement ResultSet)
-           (java.util Iterator)))
+           (java.util Iterator)
+           (java.time Instant Duration)))
 
+(defn query [db params]
+  (if-let [sql (first params)]
+    (log/debug {:fn ::query :sql sql :other-params params})
+    (let [start (Instant/now)
+          result (jdbc/query db params)
+          end (Instant/now)
+          elapsed (Duration/between start end)]
+      (log/debug {:fn ::query :elapsed-millis (.toMillis elapsed)})
+      result)))
 
 (defn resultset-iterator
   ([^ResultSet rs] (resultset-iterator rs {}))

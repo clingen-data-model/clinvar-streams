@@ -78,6 +78,19 @@
         (assert (in? [0 1] ret))                            ; Assert ret in [0 1]
         (= 1 ret)))))
 
+
+(defn build-insert-op
+  "Given table-name, a map of column types and a map of column values,
+  return a map of parameterized sql string, and seq of parameter values as
+  {:sql \"...\" :values [...]}"
+  [{:keys [table-name type-map value-map]}]
+  (let [col-name-keys (keys type-map)
+        sql (format "insert into %s(%s) values(%s); "
+                    table-name
+                    (s/join "," (mapv #(name %) col-name-keys))
+                    (s/join "," (mapv (fn [%] "?") col-name-keys)))]
+    {:sql sql :values (mapv #(get value-map %) col-name-keys)}))
+
 ; Check for primary key violation exception, log warning, run again with 'insert or replace'
 (defn -assert-insert
   [{:keys [table-name type-map value-map]}]
@@ -358,11 +371,10 @@
     (assert-insert {:table-name "variation"
                     :type-map types
                     :value-map values})
-    (comment
-      (doseq [v descendant-values]
-        (assert-insert {:table-name "variation_descendant_ids"
-                        :type-map descendant-types
-                        :value-map v})))))
+    (doseq [v descendant-values]
+      (assert-insert {:table-name "variation_descendant_ids"
+                      :type-map descendant-types
+                      :value-map v}))))
 
 (defn store-gene-association
   [gene-association]

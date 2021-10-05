@@ -5,7 +5,7 @@
             [clinvar-combiner.combiners.clinical-assertion :as c-assertion]
             [cheshire.core :as json]
             [taoensso.timbre :as log]
-            [clinvar-streams.storage.database-sqlite.sink :as sink]
+            [clinvar-streams.storage.database-sqlite.sink2 :as sink]
             [clinvar-streams.storage.database-sqlite.client :as db-client]
             [clojure.java.io :as io]
             [clinvar-combiner.combiners.core :as c-core]
@@ -19,8 +19,6 @@
   [consumer topic-name]
   (let [partition-infos (.partitionsFor consumer topic-name)]
     (map #(TopicPartition. (.topic %) (.partition %)) partition-infos)))
-
-
 
 (defn make-consume-seq
   "Returns a function which when called returns a lazy-seq over all the messages
@@ -38,8 +36,7 @@
                                ))]
               (if (not (empty? batch))
                 (lazy-cat batch (consume-batch consumer))
-                (lazy-cat [nil] (consume-batch consumer)))
-              ))]
+                (lazy-cat [nil] (consume-batch consumer)))))]
     (partial consume-batch consumer)))
 
 ;(defn make-consume-fn
@@ -154,10 +151,8 @@
             (let [batch (jc/poll consumer (Duration/ofSeconds 5))]
               (if (not (empty? batch))
                 (lazy-cat [batch] (consume-batch consumer))
-                (lazy-cat [nil] (consume-batch consumer)))
-              ))]
+                (lazy-cat [nil] (consume-batch consumer)))))]
     (lazy-seq (consume-batch consumer))))
-
 
 (defn make-consume-fn-batch
   "Returns a function that yields the next unpolled message from the consumer on each call.
@@ -174,6 +169,40 @@
 (def run-streaming-mode-continue (atom true))
 (def run-streaming-mode-is-running (atom false))
 
+;(defn run-streaming-mode-oneatatime
+;  "Runs the streaming mode of the combiner application. Reads messages by calling consume-fn
+;  with no args, stores messages locally, and sends appropriate output messages by calling
+;  produce-fn with a single message arg. Runs while run-streaming-mode-continue is truthy."
+;  [consume-fn! produce-fn!]
+;  (reset! run-streaming-mode-is-running true)
+;  (log/info {:fn :run-streaming-mode})
+;  (while @run-streaming-mode-continue
+;    (log/info "Checking for next batch")
+;    (let [batch (consume-fn!)]
+;      (if (not (empty? batch))
+;        (doseq [rec batch]
+;          (do
+;            ;(log/debug {:rec rec})
+;            (let [k (:key rec) v (:value rec)
+;                  offset (:offset rec)
+;                  partition-idx (:partition rec)
+;                  topic-name (:topic-name rec)
+;                  parsed-value (json/parse-string v true)]
+;              (sink/store-message parsed-value)
+;              (if (= "release_sentinel" (get-in parsed-value [:content :entity_type]))
+;                (do (process-release-sentinel parsed-value produce-fn!)
+;                    ; Mark entire database as clean. Look into whether this is the best way to do this.
+;                    ; If failure occurs part-way through processing one release's batch of messages, the
+;                    ; part sent will be sent again. Should be okay.
+;                    (if (= "end" (:sentinel_type parsed-value))
+;                      (mark-database-clean!))))
+;              ; Update offset in db to offset + 1 (next offset to read)
+;              (db-client/update-offset topic-name partition-idx (inc offset)))))
+;        (log/info {:fn :run-streaming-mode :msg "No new messages"}))))
+;  (reset! run-streaming-mode-is-running false)
+;  (log/info {:fn :run-streaming-mode :msg "Exiting streaming mode"}))
+
+
 (defn run-streaming-mode
   "Runs the streaming mode of the combiner application. Reads messages by calling consume-fn
   with no args, stores messages locally, and sends appropriate output messages by calling
@@ -183,26 +212,53 @@
   (log/info {:fn :run-streaming-mode})
   (while @run-streaming-mode-continue
     (log/info "Checking for next batch")
-    (let [batch (consume-fn!)]
-      (if (not (empty? batch))
-        (doseq [rec batch]
-          (do
-            ;(log/debug {:rec rec})
-            (let [k (:key rec) v (:value rec)
-                  offset (:offset rec)
-                  partition-idx (:partition rec)
-                  topic-name (:topic-name rec)
-                  parsed-value (json/parse-string v true)]
-              (sink/store-message parsed-value)
-              (if (= "release_sentinel" (get-in parsed-value [:content :entity_type]))
-                (do (process-release-sentinel parsed-value produce-fn!)
+    (let [batch (consume-fn!)
+          ; Partition into sub-batches separated by release sentinels
+          sub-batches (partition-by #(= "release_sentinel"
+                                        (get-in % [:content :entity_type]))
+                                    batch)]
+      (doseq [sub-batch sub-batches]
+        (if (not (empty? sub-batch))
+          ; TODO rename sink2/store-message
+          (let [sub-batch-values (map #(json/parse-string (:value %) true) sub-batch)]
+            (if (= "release_sentinel"
+                   (get-in (first sub-batch) [:content :entity_type]))
+              ; Process release sentinel(s)
+              (doseq [sentinel-message sub-batch-values]
+                (process-release-sentinel sentinel-message produce-fn!)
                     ; Mark entire database as clean. Look into whether this is the best way to do this.
                     ; If failure occurs part-way through processing one release's batch of messages, the
                     ; part sent will be sent again. Should be okay.
-                    (if (= "end" (:sentinel_type parsed-value))
-                      (mark-database-clean!))))
-              ; Update offset in db to offset + 1 (next offset to read)
-              (db-client/update-offset topic-name partition-idx (inc offset)))))
-        (log/info {:fn :run-streaming-mode :msg "No new messages"}))))
+                (when (= "end" (:sentinel_type sentinel-message))
+                  (mark-database-clean!)))
+              ; Process non-release-sentinel sequence of messages
+              (let [insert-ops (map #(sink/make-message-insert-op %) sub-batch-values)
+                    ; TODO Partition first up to any release sentinels that exist
+                    partitioned-insert-ops (sink/merge-ops insert-ops)]
+                (doseq [partitioned-insert-op partitioned-insert-ops]
+                  (log/debug {:fn :run-streaming-mode :partitioned-insert-op partitioned-insert-op})
+                  (let [pstmt (sink/sql-op->PreparedStatement partitioned-insert-op)]
+                    (.executeUpdate pstmt))))))
+
+          ;(doseq [rec batch]
+          ;  (do
+          ;    ;(log/debug {:rec rec})
+          ;    (let [k (:key rec) v (:value rec)
+          ;          offset (:offset rec)
+          ;          partition-idx (:partition rec)
+          ;          topic-name (:topic-name rec)
+          ;          parsed-value (json/parse-string v true)]
+          ;      (sink/store-message parsed-value)
+          ;      (if (= "release_sentinel" (get-in parsed-value [:content :entity_type]))
+          ;        (do (process-release-sentinel parsed-value produce-fn!)
+          ;            ; Mark entire database as clean. Look into whether this is the best way to do this.
+          ;            ; If failure occurs part-way through processing one release's batch of messages, the
+          ;            ; part sent will be sent again. Should be okay.
+          ;            (if (= "end" (:sentinel_type parsed-value))
+          ;              (mark-database-clean!))))
+          ;      ; Update offset in db to offset + 1 (next offset to read)
+          ;      (db-client/update-offset topic-name partition-idx (inc offset)))))
+
+          (log/info {:fn :run-streaming-mode :msg "No new messages"})))))
   (reset! run-streaming-mode-is-running false)
   (log/info {:fn :run-streaming-mode :msg "Exiting streaming mode"}))

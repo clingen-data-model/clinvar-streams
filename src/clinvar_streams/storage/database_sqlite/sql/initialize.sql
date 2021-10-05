@@ -22,10 +22,6 @@ drop table if exists trait_set_trait_ids;
 drop table if exists clinical_assertion_trait_set;
 drop table if exists clinical_assertion_trait_set_clinical_assertion_trait_ids;
 drop table if exists clinical_assertion_trait;
-drop table if exists gene;
-drop table if exists variation;
---drop table if exists variation_child_ids;
---drop table if exists variation_descendant_ids;
 drop table if exists gene_association;
 drop table if exists variation_archive;
 drop table if exists rcv_accession;
@@ -171,6 +167,7 @@ create table clinical_assertion_trait (
 --);
 
 -- Variation
+drop table if exists gene;
 create table gene (
     release_date text,
     dirty int,
@@ -181,6 +178,7 @@ create table gene (
     full_name text,
     primary key(id, release_date) on conflict replace
 );
+drop table if exists variation;
 create table variation (
     release_date text,
     dirty int,
@@ -209,25 +207,51 @@ where a.release_date =
     order by release_date desc
     limit 1);
 
-
 ---- descendant and child ids exist, but maybe not in this release changeset
 ---- part of variation
---create table variation_child_ids (
+-- create table variation_child_ids (
 --    release_date text,
 --    variation_id text,
 --    variation_child_id text
 --    , foreign key(variation_id, release_date) references variation(id, release_date) on delete cascade
-----    , foreign key(variation_child_id, release_date) references variation(id, release_date) on delete cascade
---);
--- part of variation
--- create table variation_descendant_ids (
---    release_date text,
---    variation_id text,
---    descendant_id text
--- --    descendant_release_date text
--- --    , foreign key(variation_id, release_date) references variation(id, release_date) on delete cascade
--- -- --    , foreign key(variation_descendant_id) references variation(id) on delete cascade
+-- --    , foreign key(variation_child_id, release_date) references variation(id, release_date) on delete cascade
 -- );
+-- part of variation
+drop table if exists variation_descendant_ids;
+create table variation_descendant_ids (
+    release_date text,
+    variation_id text,
+    descendant_id text,
+--    descendant_release_date text
+    primary key (release_date, variation_id, descendant_id) on conflict replace,
+    foreign key(variation_id, release_date) references variation(id, release_date) on delete cascade
+-- --    , foreign key(variation_descendant_id) references variation(id) on delete cascade
+);
+
+-- List of (most recent) variations which are dirty or have a descendant that is dirty.
+drop view if exists dirty_root_variations_view;
+create view dirty_root_variations_view as
+select distinct v.* from variation_latest v
+    left join variation_descendant_ids vdi
+      on v.id = vdi.variation_id
+      and v.release_date = vdi.release_date
+    left join variation_latest vd
+      on vdi.descendant_id = vd.id
+where (
+-- Variation or any of its descendants are dirty
+    v.dirty = 1
+    or vd.dirty = 1)
+-- No other variation has this variation as a descendant
+and not exists (
+    select * from variation_latest v2
+    left join variation_descendant_ids vdi2
+        on v2.id = vdi2.variation_id
+        and v2.release_date = vdi2.release_date
+    where vdi2.descendant_id = v.id)
+order by v.id, v.release_date
+;
+
+
 create table gene_association (
     release_date text,
     dirty int,

@@ -23,6 +23,7 @@
             [clojure.java.io :as io]
             [clojure.java.jdbc :as jdbc]
             [clojure.string :as s]
+            [mount.core]
             [clojure.spec.alpha :as spec]
             [clinvar-combiner.stream :as stream])
   (:import [org.apache.kafka.streams KafkaStreams]
@@ -52,8 +53,8 @@
     (log/info {:assignment assignment})
     (doseq [topic-partition assignment]
       (jc/seek consumer (TopicPartition.
-                          (:topic-name topic-partition)
-                          (:partition topic-partition))
+                         (:topic-name topic-partition)
+                         (:partition topic-partition))
                0)))
   consumer)
 
@@ -89,8 +90,8 @@
         ; Start from local db version
         (= "LOCAL" version-to-resume-from)
         (stream/set-consumer-to-db-offset
-          consumer
-          (stream/topic-partitions consumer topic-name)),
+         consumer
+         (stream/topic-partitions consumer topic-name)),
 
         ; Start from specific version
         :else
