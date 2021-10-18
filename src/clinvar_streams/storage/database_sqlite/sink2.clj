@@ -77,7 +77,7 @@
         (assert (in? [0 1] ret))                            ; Assert ret in [0 1]
         (= 1 ret)))))
 
-(defn build-insert-op
+(defn build-insert-op-statements
   "Given table-name, a map of column types and a map of column values,
   return a map of parameterized sql string, and seq of parameter values as
   {:sql \"...\" :parameter-values [...]}"
@@ -89,45 +89,97 @@
                     (s/join "," (mapv (fn [%] "?") col-name-keys)))]
     {:sql sql
      :parameter-types (mapv #(get type-map %) col-name-keys)
+     :parameter-names col-name-keys
+     :parameter-values (mapv #(get value-map %) col-name-keys)}))
+
+(defn build-insert-op
+  "Given table-name, a map of column types and a map of column values,
+  return a map of parameterized sql string, and seq of parameter values as
+  {:sql \"...\" :parameter-values [...]}"
+  [{:keys [table-name type-map value-map]}]
+  (let [col-name-keys (keys type-map)
+        ; sql (format "insert into %s(%s) values(%s); "
+        ;             table-name
+        ;             (s/join "," (mapv #(name %) col-name-keys))
+        ;             (s/join "," (mapv (fn [%] "?") col-name-keys)))
+        ]
+    {:op-type :insert
+     :table-name table-name
+     ;:parameter-types (mapv #(get type-map %) col-name-keys)
+     :parameter-names col-name-keys
      :parameter-values (mapv #(get value-map %) col-name-keys)}))
 
 (defn merge-ops
-  "Given seq of sql ops in form:
-  {:sql \"...\" :parameter-values [...]}
-  Return a seq of n/batch-size merged ops containing all of the sql statements and parameter values"
+  "Given seq of insert sql ops in form:
+  {:op-type :...
+   :parameter-types [...]
+   :parameter-names [...]
+   :parameter-values [...]}
+  Return a seq of merged ops containing ?-parameterized sql statements and parameter values"
   [ops]
-  (let []
-    (for [ops-batch (partition-all 500 ops)]
-      {:sql (s/join "; " (mapv #(:sql %) ops-batch))
-       :parameter-types (flatten (mapv #(:parameter-types %) ops-batch))
-       :parameter-values (flatten (mapv #(:parameter-values %) ops-batch))})))
+  (log/info {:fn :merge-ops})
+  (let [partitioned-ops (partition-by #(vector (:op-type %) (:table-name %) (:parameter-names %)) ops)]
+    (flatten
+      (into
+        []
+        (for [part partitioned-ops]
+          (do (log/debug {:msg "Merging ops"
+                          :op-type (:op-type (first part))
+                          :table-name (:table-name (first part))
+                          :parameter-names (:parameter-names (first part))})
+              (comment (log/info {:part part}))
+              (for [batch (partition-all 500 part)]
+                (do (comment (log/info {:batch batch}))
+                    (when (seq batch)
+                      (let [op-type (:op-type (first batch))
+                            table-name (:table-name (first batch))
+                            parameter-names (map name (:parameter-names (first batch)))]
+                        (case op-type
+                          :insert
+                          {:sql (format "insert into %s values %s"
+                                        (str table-name "(" (s/join "," parameter-names) ")")
+                                        (s/join "," (map (fn [_] (str "("
+                                                                      (s/join "," (map (fn [_] "?") parameter-names))
+                                                                      ")"))
+                                                         batch)))
+                           ;:parameter-types (flatten (mapv #(:parameter-types %) ops-batch))
+                           :parameter-values (flatten (mapv #(:parameter-values %) batch))}
+                          ; else
+                          (throw (ex-info (str "Unsupported op to merge: " op-type)
+                                          {:op-type op-type
+                                           :table-name table-name
+                                           :parameter-names parameter-names
+                                           :batch batch
+                                           :first (first batch)})))))))))))))
 
 (defn parameterize-op-statement
   [conn sql values]
   (let [params (map (fn [[i value]] {:idx (+ 1 i) :value value})
                     (map-indexed vector values))
         pstmt (.prepareStatement conn sql)]
+    (log/info {:fn :parameterize-op-statement :sql sql :params params})
     (doseq [param params]
       ;(log/debug "Looping through params" (into [] ps))
       (log/trace param)
       (.setObject pstmt (:idx param) (:value param)))
     pstmt))
 
-(defn sql-op->PreparedStatement
-  [op]
-  (with-open [conn (get-connection @db-client/db)]
-    (let [sql (:sql op)
-          values (:parameter-values op)
-          pstmt (parameterize-op-statement conn (:sql op) (:parameter-values op))]
-      (try (let [updated-count (.executeUpdate pstmt)]
-             (if (not= 1 updated-count)
-               (throw (ex-info (str "Failed to insert")
-                               {:cause {:sql sql :values values}}))))
-           (catch Exception e
-             (log/error (ex-info "Exception on insert"
-                                 {:cause {:sql sql :values values}
-                                  :sql-state (.getSQLState e)}))
-             (throw e))))))
+;(defn sql-op->PreparedStatement
+;  [op]
+;  (with-open [conn (get-connection @db-client/db)]
+;    (let [sql (:sql op)
+;          values (:parameter-values op)
+;          pstmt (parameterize-op-statement conn (:sql op) (:parameter-values op))]
+;      (comment (try (let [updated-count (.executeUpdate pstmt)]
+;              (if (not= 1 updated-count)
+;                (throw (ex-info (str "Failed to insert")
+;                                {:cause {:sql sql :values values}}))))
+;            (catch Exception e
+;              (log/error (ex-info "Exception on insert"
+;                                  {:cause {:sql sql :values values}
+;                                   :sql-state (.getSQLState e)}))
+;              (throw e))))
+;      pstmt)))
 
 ; Check for primary key violation exception, log warning, run again with 'insert or replace'
 ;(defn -assert-insert
@@ -242,9 +294,9 @@
                       {:dirty 1
                        :all_names (json/generate-string (:all_names submitter))
                        :all_abbrevs (json/generate-string (:all_abbrevs submitter))})]
-    (build-insert-op {:table-name "submitter"
-                      :type-map types
-                      :value-map values})))
+    (list (build-insert-op {:table-name "submitter"
+                            :type-map types
+                            :value-map values}))))
 
 (defn store-submission
   [submission]
@@ -258,9 +310,9 @@
         values (merge (select-keys submission (keys types))
                       {:dirty 1
                        :additional_submitter_ids (json/generate-string (:all_names submission))})]
-    (build-insert-op {:table-name "submission"
-                      :type-map types
-                      :value-map values})))
+    (list (build-insert-op {:table-name "submission"
+                            :type-map types
+                            :value-map values}))))
 
 (defn store-trait
   [trait]
@@ -285,9 +337,9 @@
                        :keywords (json/generate-string (:keywords trait))
                        :attribute_content (json-string-if-not-string (:attribute_content trait))
                        :xrefs (json-string-if-not-string (:xrefs trait))})]
-    (build-insert-op {:table-name "trait"
-                      :type-map trait-types
-                      :value-map values})))
+    (list (build-insert-op {:table-name "trait"
+                            :type-map trait-types
+                            :value-map values}))))
 
 (defn store-trait-set
   [trait-set]
@@ -302,9 +354,9 @@
         values (merge (select-keys trait-set (keys types))
                       {:dirty 1
                        :trait_ids (json/generate-string (:trait_ids trait-set))})]
-    (build-insert-op {:table-name "trait_set"
-                      :type-map types
-                      :value-map values})))
+    (list (build-insert-op {:table-name "trait_set"
+                            :type-map types
+                            :value-map values}))))
 
 (defn store-clinical-assertion-trait-set
   [clinical-assertion-trait-set]
@@ -354,9 +406,9 @@
                       {:dirty 1
                        :xrefs (json/generate-string (:xrefs clinical-assertion-trait))
                        :alternate_names (json/generate-string (:alternate_names clinical-assertion-trait))})]
-    (build-insert-op {:table-name "clinical_assertion_trait"
-                      :type-map types
-                      :value-map values})))
+    (list (build-insert-op {:table-name "clinical_assertion_trait"
+                            :type-map types
+                            :value-map values}))))
 
 (defn store-gene
   [gene]
@@ -369,9 +421,9 @@
                :symbol :string
                :full_name :string}
         values (merge gene {:dirty 1})]
-    (build-insert-op {:table-name "gene"
-                      :type-map types
-                      :value-map values})))
+    (list (build-insert-op {:table-name "gene"
+                            :type-map types
+                            :value-map values}))))
 
 (defn store-variation
   [variation]
@@ -422,9 +474,9 @@
                :variation_id :int
                :gene_id :int}
         values (merge gene-association {:dirty 1})]
-    (build-insert-op {:table-name "gene_association"
-                      :type-map types
-                      :value-map values})))
+    (list (build-insert-op {:table-name "gene_association"
+                            :type-map types
+                            :value-map values}))))
 
 (defn store-variation-archive
   [variation-archive]
@@ -449,9 +501,9 @@
                :interp_content :string
                :content :string}
         values (merge variation-archive {:dirty 1})]
-    (build-insert-op {:table-name "variation_archive"
-                      :type-map types
-                      :value-map values})))
+    (list (build-insert-op {:table-name "variation_archive"
+                            :type-map types
+                            :value-map values}))))
 
 (defn store-rcv-accession
   [rcv-accession]
@@ -470,9 +522,9 @@
                :variation_id :int
                :trait_set_id :int}
         values (merge rcv-accession {:dirty 1})]
-    (build-insert-op {:table-name "rcv_accession"
-                      :type-map types
-                      :value-map values})))
+    (list (build-insert-op {:table-name "rcv_accession"
+                            :type-map types
+                            :value-map values}))))
 
 (defn store-clinical-assertion
   [clinical-assertion]
@@ -509,7 +561,7 @@
                        :interpretation_comments (json/generate-string (:interpretation_comments clinical-assertion))
                        :submission_names (json/generate-string (:submission_names clinical-assertion))
                        :clinical_assertion_observation_ids (json/generate-string
-                                                            (:clinical_assertion_observation_ids clinical-assertion))})
+                                                             (:clinical_assertion_observation_ids clinical-assertion))})
 
         obs-types {:release_date :string
                    :clinical_assertion_id :string
@@ -537,9 +589,9 @@
                :clinical_assertion_trait_set_id :string
                :content :string}
         values (merge observation {:dirty 1})]
-    (build-insert-op {:table-name "clinical_assertion_observation"
-                      :type-map types
-                      :value-map values})))
+    (list (build-insert-op {:table-name "clinical_assertion_observation"
+                            :type-map types
+                            :value-map values}))))
 
 (defn store-trait-mapping
   [trait-mapping]
@@ -555,9 +607,9 @@
                :medgen_id :string
                :medgen_name :string}
         values (merge trait-mapping {:dirty 1})]
-    (build-insert-op {:table-name "trait_mapping"
-                      :type-map types
-                      :value-map values})))
+    (list (build-insert-op {:table-name "trait_mapping"
+                            :type-map types
+                            :value-map values}))))
 
 (defn store-clinical-assertion-variation
   [variation]
@@ -581,10 +633,10 @@
                     :clinical_assertion_variation_id :string
                     :clinical_assertion_variation_descendant_id :string}
         desc-values-seq (map
-                         (fn [%] {:release_date (:release_date variation)
-                                  :clinical_assertion_variation_id (:id variation)
-                                  :clinical_assertion_variation_descendant_id %})
-                         (:descendant_ids variation))]
+                          (fn [%] {:release_date (:release_date variation)
+                                   :clinical_assertion_variation_id (:id variation)
+                                   :clinical_assertion_variation_descendant_id %})
+                          (:descendant_ids variation))]
     (concat [(build-insert-op {:table-name "clinical_assertion_variation"
                                :type-map types
                                :value-map values})]
@@ -608,9 +660,9 @@
         values (merge sentinel
                       {:dirty 1
                        :rules (json/generate-string (:rules sentinel))})]
-    (build-insert-op {:table-name "release_sentinels"
-                      :type-map types
-                      :value-map values})))
+    (list (build-insert-op {:table-name "release_sentinels"
+                            :type-map types
+                            :value-map values}))))
 
 (defn flatten-kafka-message
   "Moves everything under :content up to top level of map"

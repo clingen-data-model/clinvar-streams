@@ -3,12 +3,13 @@
              :refer [topic-metadata]]
             [jackdaw.client :as jc]
             [clinvar-combiner.combiners.clinical-assertion :as c-assertion]
+            [clinvar-combiner.combiners.core :as c-core]
             [cheshire.core :as json]
             [taoensso.timbre :as log]
             [clinvar-streams.storage.database-sqlite.sink2 :as sink]
             [clinvar-streams.storage.database-sqlite.client :as db-client]
             [clojure.java.io :as io]
-            [clinvar-combiner.combiners.core :as c-core]
+            [clojure.pprint :refer [pprint]]
             [clojure.java.jdbc :as jdbc])
   (:import (java.time Duration)
            (org.apache.kafka.common TopicPartition)
@@ -202,6 +203,37 @@
 ;  (reset! run-streaming-mode-is-running false)
 ;  (log/info {:fn :run-streaming-mode :msg "Exiting streaming mode"}))
 
+(defn max-key-in
+  "Given a seq of maps, return the map with the maximum value of the key given.
+  Maximum is determined with < operator.
+  If multiple maps have the max, returns the first in the seq.
+  If s is empty? returns nil"
+  [s key]
+  (if (not (empty? s))
+    (reduce (fn
+              ([m1 m2]
+               (if (< (get m1 key) (get m2 key))
+                 m2 m1)))
+            s)))
+
+(defn max-offsets-for-partitions
+  "Given a seq of jackdaw datafied Kafka records, return the max offset for
+  each topic partition represented in the seq. Returns a seq of maps of form:
+  {:topic-name ... :partition ... :offset ...}"
+  [message-seq]
+  (->> message-seq
+       (sort-by #(vector (:topic-name %)
+                         (:partition %)))
+       ;(fn [%] (pprint %) %)
+       (partition-by #(vector (:topic-name %)
+                              (:partition %)))
+       ;(fn [%] (pprint %) %)
+       (mapv (fn [part] {:topic-name (:topic-name (first part))
+                         :partition (:partition (first part))
+                         :offset (:offset (max-key-in part :offset))}))
+       ;(fn [%] (pprint %) %)
+       ))
+
 
 (defn run-streaming-mode
   "Runs the streaming mode of the combiner application. Reads messages by calling consume-fn
@@ -214,31 +246,53 @@
     (log/info "Checking for next batch")
     (let [batch (consume-fn!)
           ; Partition into sub-batches separated by release sentinels
+          batch-with-values (map #(assoc % :value (json/parse-string (:value %) true)) batch)
+
           sub-batches (partition-by #(= "release_sentinel"
-                                        (get-in % [:content :entity_type]))
-                                    batch)]
+                                        (get-in % [:value :content :entity_type]))
+                                    batch-with-values)]
       (doseq [sub-batch sub-batches]
         (if (not (empty? sub-batch))
-          ; TODO rename sink2/store-message
-          (let [sub-batch-values (map #(json/parse-string (:value %) true) sub-batch)]
+          (let [sub-batch-values (map #(:value %) sub-batch)]
             (if (= "release_sentinel"
-                   (get-in (first sub-batch) [:content :entity_type]))
+                   (get-in (first sub-batch-values) [:content :entity_type]))
               ; Process release sentinel(s)
               (doseq [sentinel-message sub-batch-values]
+                (log/info {:fn :run-streaming-mode :msg "Processing release sentinel" :release_sentinel sentinel-message})
                 (process-release-sentinel sentinel-message produce-fn!)
-                    ; Mark entire database as clean. Look into whether this is the best way to do this.
-                    ; If failure occurs part-way through processing one release's batch of messages, the
-                    ; part sent will be sent again. Should be okay.
-                (when (= "end" (:sentinel_type sentinel-message))
+                ; Mark entire database as clean. Look into whether this is the best way to do this.
+                ; If failure occurs part-way through processing one release's batch of messages, the
+                ; part sent will be sent again. Should be okay.
+                (when (= "end" (get sentinel-message [:content :sentinel_type]))
                   (mark-database-clean!)))
               ; Process non-release-sentinel sequence of messages
-              (let [insert-ops (map #(sink/make-message-insert-op %) sub-batch-values)
+              (let [_ (log/info {:sub-batch-values sub-batch-values})
+                    insert-ops (flatten (map #(sink/make-message-insert-op %) sub-batch-values))
                     ; TODO Partition first up to any release sentinels that exist
                     partitioned-insert-ops (sink/merge-ops insert-ops)]
                 (doseq [partitioned-insert-op partitioned-insert-ops]
                   (log/debug {:fn :run-streaming-mode :partitioned-insert-op partitioned-insert-op})
-                  (let [pstmt (sink/sql-op->PreparedStatement partitioned-insert-op)]
-                    (.executeUpdate pstmt))))))
+                  (with-open [conn (jdbc/get-connection @db-client/db)]
+                    (let [sql (:sql partitioned-insert-op)
+                          values (:parameter-values partitioned-insert-op)
+                          pstmt (sink/parameterize-op-statement conn sql values)]
+                      (let [update-count (.executeUpdate pstmt)]
+                        (log/info "Executed update, row count: " (str update-count)))
+                      )))))
+            (log/info {:fn :run-streaming-mode :msg "Updating local topic offsets"})
+            (let [to-int (fn [a] (if (int? a) a (Integer/parseInt a)))
+                  max-offsets (max-offsets-for-partitions batch-with-values)]
+              (doseq [partition-offset max-offsets]
+
+                (let [t (:topic-name partition-offset)
+                      p (:partition partition-offset)
+                      o (inc (:offset partition-offset))]
+                  (log/info {:fn :run-streaming-mode
+                             :msg "Updating local offset for partition"
+                             :topic-name t :partition p :offset o})
+                  (db-client/update-offset t p o)))
+              )
+            )
 
           ;(doseq [rec batch]
           ;  (do
