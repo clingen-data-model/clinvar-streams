@@ -263,7 +263,7 @@
                 ; Mark entire database as clean. Look into whether this is the best way to do this.
                 ; If failure occurs part-way through processing one release's batch of messages, the
                 ; part sent will be sent again. Should be okay.
-                (when (= "end" (get sentinel-message [:content :sentinel_type]))
+                (when (= "end" (get-in sentinel-message [:content :sentinel_type]))
                   (mark-database-clean!)))
               ; Process non-release-sentinel sequence of messages
               (let [_ (log/info {:sub-batch-values sub-batch-values})
