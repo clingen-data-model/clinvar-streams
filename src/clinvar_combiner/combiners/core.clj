@@ -77,6 +77,11 @@
        (resultset-iterator rs {:close-fn #(do (.close rs)
                                               (.close ps)
                                               (.close conn))})))))
+; test case
+;           id = 549768
+;descendant_id = 549767
+;           id = 549767
+;descendant_id = 24880
 
 (defn get-dirty-variations []
   (letfn [(get-dirty-root-variations []
@@ -89,12 +94,19 @@
                           v.dirty = 1
                           or
                           exists (select * from variation_latest vd
-                                  where v.descendant_ids like ('%\"' || vd.id || '\"%')))
+                                  left join variation_descendant_ids vdi
+                                    on vd.id = vdi.descendant_id
+                                    and vd.release_date = vdi.release_date
+                                  where vdi.variation_id = v.id))
                         -- exclude those which are descendants of other variations
                         and not exists
-                          (select descendant_ids
-                           from variation_latest
-                           where descendant_ids like ('%\"' || v.id || '\"%'))
+                          (select variation_id
+                           from variation_descendant_ids vdio
+                           where vdio.release_date = (select max(release_date)
+                                                      from variation_descendant_ids vdim
+                                                      where vdim.variation_id = vdio.variation_id
+                                                      and vdim.descendant_id = vdio.descendant_id)
+                            and vdio.descendant_id = v.id)
                       order by v.id asc")
                   rs-iterator (execute-to-rs-iterator! s [])]
               (iterator-seq rs-iterator)))
