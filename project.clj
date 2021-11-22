@@ -20,16 +20,20 @@
                  [com.google.cloud/google-cloud-storage "1.115.0"]
                  [com.taoensso/timbre "4.10.0"]
                  [c3p0/c3p0 "0.9.1.2"]
+                 [nrepl "0.8.3"]
                  [org.postgresql/postgresql "42.2.16"]
                  [org.xerial/sqlite-jdbc "3.32.3.2"]]
   :repl-options {:init-ns clinvar-combiner.core
                  :caught clojure.repl/pst}
+  :jvm-opts ["-Xms256m" "-XX:MaxRAMPercentage=50"]
   :main clinvar-streams.core
   :aot [clinvar-streams.core]
   :resource-paths ["resources"]
   :target-path "target/%s"
   :auto-clean false
-  :profiles {:uberjar {:uberjar-name "clinvar-streams.jar"
+  :profiles {;:run-with-repl {:main clinvar-streams.core-repl
+             ;            :repl-options {:init-ns clinvar-streams.core-repl}}
+             :uberjar {:uberjar-name "clinvar-streams.jar"
                        :aot :all}
              :testdata {:main clinvar-raw.generate-local-topic
                         ;:aot [#"clinvar-raw.*"]

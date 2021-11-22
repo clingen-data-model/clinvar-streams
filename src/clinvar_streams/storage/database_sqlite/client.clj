@@ -40,7 +40,9 @@
                :subname db-path
                ; foreign_keys=on sets PRAGMA foreign_keys=on
                :foreign_keys "on"
-               :synchronous "off"})
+               :synchronous "off"
+               ; timeout in milliseconds
+               :busy_timeout 30000})
    (let [conn (jdbc/get-connection @db)]
      (.close conn))))
 

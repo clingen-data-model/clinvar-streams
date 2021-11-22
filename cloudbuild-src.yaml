@@ -1,0 +1,38 @@
+# Cloud Build configuration for clinvar-streams
+#
+# Command line test usage:
+# gcloud builds submit --project=clingen-stage --config ./cloudbuild.yaml \
+#  --substitutions=COMMIT_SHA="testbuild" .
+
+# Builds clinvar-streams docker image artifact and pushes it to the project gcr
+# Also build a dependencies image, which contains maven and clojars deps
+# which can serve as the starting point for a test and source jar build
+# as long as /project.clj has not changed.
+
+# Since it pushes the deps image as :latest, if multiple feature branches
+# build in the same cloud build project with different project.clj files,
+# this may invalidate :latest and negate its caching
+steps:
+
+  # Build deps image. Will do nothing if deps haven't changed
+  - name: 'gcr.io/cloud-builders/docker'
+    args: [ 'build', '.',
+            '-f', 'docker/clinvar-streams.src.Dockerfile',
+            '-t', 'gcr.io/$PROJECT_ID/clinvar-streams:$COMMIT_SHA',
+            '-t', 'gcr.io/$PROJECT_ID/clinvar-streams:latest' ]
+
+  # run tests in code builder image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: [ 'run',
+            #'-v', '/workspace/test:/app/test',
+            '--entrypoint', '/bin/bash',
+            'gcr.io/$PROJECT_ID/clinvar-streams:latest',
+            'lein', 'test' ]
+
+# push the images
+images:
+  - 'gcr.io/$PROJECT_ID/clinvar-streams:$COMMIT_SHA'
+  - 'gcr.io/$PROJECT_ID/clinvar-streams:latest'
+
+# timeout if not complete in 30 minutes
+timeout: 1800s
