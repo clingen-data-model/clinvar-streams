@@ -3,7 +3,7 @@
   (:require [clojure.data.json :as json]
             [clojure.zip       :as zip]))
 
-(defn ^:private decode
+(defn decode
   "Decode JSON string with stringified `content` field into EDN."
   [json]
   (-> json json/read-str (update "content" json/read-str)))
