@@ -1,15 +1,20 @@
 (ns clinvar-raw.ingest
   "Compare weird JSON-encoded XML messages."
-  (:require [clinvar-raw.debug]
-            [clojure.data.json  :as json]
-            [clojure.spec.alpha :as s]
+  (:require [clojure.data.json  :as json]
             [clojure.zip        :as zip]))
 
 ;; Messages are encoded as JSON which lacks sets.  Data that are
-;; semantically unordered are encoded as JSON arrays which are
-;; necessarily ordered.  Now that mangled data is confined to the
-;; `content` field in the message which is further encoded as a string
-;; which must be parsed into JSON before being decoded into EDN.
+;; semantically unordered are encoded as JSON arrays, which forces
+;; an ordering that creates spurious differences between messages.
+;;
+;; Now that mangled data is confined to the `content` field in the
+;; message, which is further encoded as a string which must be parsed
+;; into JSON before being decoded into EDN.
+
+;; Consequently, pass JSON message file contents through `decode` to
+;; lift them into EDN to handle the stringified `content` field, then
+;; pass the resulting decoded JSON as EDN to `differ?` to detect
+;; differences between messages.
 
 (defn decode
   "Decode JSON string with stringified `content` field into EDN."
@@ -31,15 +36,6 @@
                       (let [[k v] node]
                         (if (vector? v) (zip/replace loc [k (set v)]) loc))
                       loc))))))))
-
-(s/fdef differ?
-  :args (s/cat :now   (constantly true)
-               :was   (constantly true))
-  :ret  (s/or  :false nil?
-               :true  (complement nil?))
-  :fn   #(clinvar-raw.debug/trace %)
-  #_#(or (nil? (:ret %))
-         (==   (:ret %) (-> % :args :now hash))))
 
 (defn differ?
   "Nil when NOW equals WAS after DISORDERing their vectors into sets.

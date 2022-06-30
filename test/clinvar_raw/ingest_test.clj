@@ -1,15 +1,10 @@
 (ns clinvar-raw.ingest-test
   "Test the clinvar-raw.ingest namespace."
-  (:require [clojure.test            :refer [deftest is testing]]
-            [clojure.data.json       :as json]
-            [clojure.java.io         :as io]
-            [clojure.spec.alpha      :as s]
-            [clojure.spec.test.alpha :as stest]
-            [clojure.string          :as str]
-            [clinvar-raw.debug]
-            [clinvar-raw.ingest      :as ingest]))
-
-(stest/instrument `ingest/differ?)
+  (:require [clojure.test       :refer [deftest is testing]]
+            [clojure.data.json  :as json]
+            [clojure.java.io    :as io]
+            [clojure.string     :as str]
+            [clinvar-raw.ingest :as ingest]))
 
 (defn ^:private canonicalize
   "Like clojure.core/slurp except trim whitespace from lines in FILE."
@@ -30,7 +25,7 @@
       slurp ingest/decode))
 
 (def ^:private msg
-  "EDN for a shorter message to ease testing."
+  "EDN for a shorter message to ease testing and eye-balling."
   {"id" "17674"
    "child_ids" []
    "name" "NM_007294.3(BRCA1):c.4065_4068del (p.Asn1355fs)"
@@ -92,8 +87,6 @@
   "True when differ? returns either nil or a hash of its first argument."
   [[now was]]
   (let [ret (ingest/differ? now was)]
-    (clinvar-raw.debug/trace ret)
-    (clinvar-raw.debug/trace (hash now))
     (or (nil? ret)
         (==   ret (hash (#'ingest/disorder now))))))
 
