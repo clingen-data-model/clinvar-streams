@@ -1,11 +1,17 @@
 (ns clinvar-raw.ingest-test
   "Test the clinvar-raw.ingest namespace."
-  (:require [clojure.data.json  :as json]
-            [clojure.java.io    :as io]
-            [clojure.string     :as str]
-            [clinvar-raw.ingest :as ingest]))
+  (:require [clojure.test            :refer [deftest is testing]]
+            [clojure.data.json       :as json]
+            [clojure.java.io         :as io]
+            [clojure.spec.alpha      :as s]
+            [clojure.spec.test.alpha :as stest]
+            [clojure.string          :as str]
+            [clinvar-raw.debug]
+            [clinvar-raw.ingest      :as ingest]))
 
-(defn canonicalize
+(stest/instrument `ingest/differ?)
+
+(defn ^:private canonicalize
   "Like clojure.core/slurp except trim whitespace from lines in FILE."
   [file]
   (with-open [in (io/reader file)]
@@ -13,17 +19,17 @@
         (->> (map str/trim)
              (apply str)))))
 
-(def now
+(def ^:private now
   "EDN content of a new message file."
   (-> "./test/clinvar_raw/resources/ingest/20191202-variation.json"
       slurp ingest/decode))
 
-(def was
+(def ^:private was
   "EDN content of an old message file."
   (-> "./test/clinvar_raw/resources/ingest/20191105-variation.json"
       slurp ingest/decode))
 
-(def msg
+(def ^:private msg
   "EDN for a shorter message to ease testing."
   {"id" "17674"
    "child_ids" []
@@ -64,11 +70,38 @@
    "descendant_ids" []
    "protein_change" ["N1355fs" "N1308fs"]})
 
-
-
-(defn encode
-  "Encode EDN as a JSON string with stringified `content` field."
+(defn ^:private encode
+  "Encode EDN as a JSON string with stringified `content` field to undo
+  what ingest/decode does.."
   [edn]
   (-> edn
       (update "content" json/write-str)
       json/write-str))
+
+(deftest round-trip
+  (testing "round-tripping through encode and decode does not lose data"
+    (is (= msg (ingest/decode (encode msg))))))
+
+(deftest differ-detects-differences
+  (testing "differ? is nil when messages are semantically the same"
+    (is (nil? (ingest/differ? now was))))
+  (testing "differ? is truthy when messages differ semantically"
+    (is (not (nil? (ingest/differ? now msg))))))
+
+(defn ^:private ok?
+  "True when differ? returns either nil or a hash of its first argument."
+  [[now was]]
+  (let [ret (ingest/differ? now was)]
+    (clinvar-raw.debug/trace ret)
+    (clinvar-raw.debug/trace (hash now))
+    (or (nil? ret)
+        (==   ret (hash (#'ingest/disorder now))))))
+
+(deftest differ-returns-nil-or-hash
+  (testing "differ? returns nil or the hash of its first argument"
+    (let [messages [msg now was]
+          args     (for [now messages was messages] [now was])]
+      (clinvar-raw.debug/trace messages)
+      (is (every? true? (map ok? args))))))
+
+(clojure.test/test-ns *ns*)
