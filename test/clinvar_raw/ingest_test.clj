@@ -6,14 +6,6 @@
             [clojure.string     :as str]
             [clinvar-raw.ingest :as ingest]))
 
-(defn ^:private canonicalize
-  "Like clojure.core/slurp except trim whitespace from lines in FILE."
-  [file]
-  (with-open [in (io/reader file)]
-    (-> in line-seq
-        (->> (map str/trim)
-             (apply str)))))
-
 (def ^:private now
   "EDN content of a new message file."
   (-> "./test/clinvar_raw/resources/ingest/20191202-variation.json"
@@ -94,7 +86,4 @@
   (testing "differ? returns nil or the hash of its first argument"
     (let [messages [msg now was]
           args     (for [now messages was messages] [now was])]
-      (clinvar-raw.debug/trace messages)
       (is (every? true? (map ok? args))))))
-
-(clojure.test/test-ns *ns*)

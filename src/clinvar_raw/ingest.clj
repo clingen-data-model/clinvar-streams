@@ -12,7 +12,7 @@
 ;; into JSON before being decoded into EDN.
 
 ;; Consequently, pass JSON message file contents through `decode` to
-;; lift them into EDN to handle the stringified `content` field, then
+;; lift them into EDN and handle the stringified `content` field, then
 ;; pass the resulting decoded JSON as EDN to `differ?` to detect
 ;; differences between messages.
 
