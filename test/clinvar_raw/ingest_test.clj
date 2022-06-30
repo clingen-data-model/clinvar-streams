@@ -2,8 +2,6 @@
   "Test the clinvar-raw.ingest namespace."
   (:require [clojure.test       :refer [deftest is testing]]
             [clojure.data.json  :as json]
-            [clojure.java.io    :as io]
-            [clojure.string     :as str]
             [clinvar-raw.ingest :as ingest]))
 
 (def ^:private now
