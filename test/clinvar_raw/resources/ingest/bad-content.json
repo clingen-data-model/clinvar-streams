@@ -1,0 +1,11 @@
+{
+  "id": "17674",
+  "child_ids": [],
+  "name": "NM_007294.3(BRCA1):c.4065_4068del (p.Asn1355fs)",
+  "content": "fnord",
+  "descendant_ids": [],
+  "protein_change": [
+    "N1355fs",
+    "N1308fs"
+  ]
+}

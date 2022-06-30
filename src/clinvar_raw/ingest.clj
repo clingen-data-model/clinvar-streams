@@ -1,6 +1,7 @@
 (ns clinvar-raw.ingest
   "Compare weird JSON-encoded XML messages."
-  (:require [clojure.data.json :as json]
+  (:require [clinvar-raw.debug :as d]
+            [clojure.data.json :as json]
             [clojure.zip       :as zip]))
 
 ;; Messages are encoded as JSON which lacks sets.  Data that are
@@ -16,10 +17,18 @@
 ;; pass the resulting decoded JSON as EDN to `differ?` to detect
 ;; differences between messages.
 
+(defn ^:private parse-json
+  "Try to parse `object` as JSON or give up and return `object`."
+  [object]
+  (try (json/read-str object)
+       (catch Throwable _ object)))
+
 (defn decode
-  "Decode JSON string with stringified `content` field into EDN."
-  [json]
-  (-> json json/read-str (update "content" json/read-str)))
+  "Try to decode OBJECT as a JSON object with a further stringified
+  `content` field into EDN or give up and just return OBJECT."
+  [object]
+  (try (-> object json/read-str (update "content" parse-json))
+       (catch Throwable _ object)))
 
 (defn ^:private disorder
   "Return EDN with any vector fields converted to sets."

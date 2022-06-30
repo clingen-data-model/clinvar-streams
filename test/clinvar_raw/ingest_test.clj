@@ -85,3 +85,11 @@
     (let [messages [msg now was]
           args     (for [now messages was messages] [now was])]
       (is (every? true? (map ok? args))))))
+
+(deftest do-not-throw
+  (let [bad (slurp "./test/clinvar_raw/resources/ingest/bad-content.json")
+        input (comp ingest/decode #'ingest/disorder)]
+    (testing "content string that cannot be parsed as JSON doesn't throw"
+      (is (input bad)))
+    (testing "input that cannot be parsed as JSON doesn't throw"
+      (is (input "fnord")))))
