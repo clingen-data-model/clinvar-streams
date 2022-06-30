@@ -1,7 +1,7 @@
 (ns clinvar-raw.ingest
   "Compare weird JSON-encoded XML messages."
-  (:require [clojure.data.json  :as json]
-            [clojure.zip        :as zip]))
+  (:require [clojure.data.json :as json]
+            [clojure.zip       :as zip]))
 
 ;; Messages are encoded as JSON which lacks sets.  Data that are
 ;; semantically unordered are encoded as JSON arrays, which forces
