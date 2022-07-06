@@ -69,10 +69,10 @@
       (if (empty? to-check)
         max-val
         (recur
-          (if (< 0 (.compareTo (first to-check) max-val))
-            (first to-check)
-            max-val)
-          (rest to-check))))))
+         (if (< 0 (.compareTo (first to-check) max-val))
+           (first to-check)
+           max-val)
+         (rest to-check))))))
 
 (defn simplify-dollar-map [m]
   "Return (get m :$) if m is a map and :$ is the only key. Otherwise return m.

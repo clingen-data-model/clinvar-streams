@@ -77,25 +77,19 @@ Usage from REPL:
 
 (defn generate-drop-messages
   [{:keys [root-dir root-matcher]
-    :or   {root-matcher #(re-matches #"\d{8}.*" %)          ; YYYYMMDD
-           }}]
-
+    :or {root-matcher #(re-matches #"\d{8}.*" %)            ; YYYYMMDD...
+         }}]
   (for [date-dir (filter #(and (root-matcher (.getName %)) (.isDirectory %)) (list-files-sorted root-dir))]
-    (let [file-listing (filter #(not (nil? %))
-                               (for [file (file-seq date-dir)]
-                                 (let [relative-path (trim-leading "/" (subs (.getPath file) (count root-dir)))]
-                                   ;(println "Relative path: " relative-path)
-                                   (if (re-matches #"\d{8}/\w+/\w+/\d+" relative-path)
-                                     relative-path))))]
-      {:release_date (yyyymmmdd-split (.getName date-dir))
-       :bucket       (ensure-leading "./" root-dir)
-       :files        (into [] file-listing)})))
-
-(defn process-local-drop-messages
-  [drop-messages]
-  (doseq [msg drop-messages]
-    (stream/process-clinvar-drop msg :storage-protocol "file://")
-    ))
+    (do (log/info {:date-dir date-dir})
+        (let [file-listing (filter #(not (nil? %))
+                                   (for [file (file-seq date-dir)]
+                                     (let [relative-path (trim-leading "/" (subs (.getPath file) (count root-dir)))]
+                                       ;(println "Relative path: " relative-path)
+                                       (if (re-matches #"\d{8}\w*/\w+/\w+/\d+" relative-path) ; YYYYMMDD.../.../.../d
+                                         relative-path))))]
+          {:release_date (yyyymmmdd-split (.getName date-dir))
+           :bucket (ensure-leading "./" root-dir)
+           :files (into [] file-listing)}))))
 
 (defn chan-get-available!
   [from-channel]
@@ -122,14 +116,45 @@ Usage from REPL:
       (.write fout (str (if (string? msg) msg (json/generate-string msg)) "\n")))))
 
 (defn upload-to-topic
+  "Upload a seq of JSON messages to a topic"
   [msgs producer-config topic-name]
   (with-open [producer (jc/producer producer-config)]
     (doseq [msg msgs]
       (log/info "Uploading" (json/generate-string msg))
       (stream/send-update-to-exchange producer topic-name msg)
       ;(jc/send! producer (jd/map->ProducerRecord jackdaw-message))
-      )
-    ))
+      )))
+
+(defn -main2
+  [{:keys [root-dir]}]
+  (let [dataset-name (.getName (io/file root-dir))
+        dsp-topic (str "broad-dsp-clinvar-" dataset-name)
+        ;clinvar-raw-topic (str "clinvar-raw-" dataset-name)
+        drop-messages (generate-drop-messages {:root-dir root-dir})
+        jackdaw-messages (map (fn [m] {:key (:release_date m)
+                                       :value m})
+                              drop-messages)]
+    ;; Save drop messages and upload them to the drop message topic
+    (save-to-topic-file jackdaw-messages (str dsp-topic ".topic"))
+
+    (let [opts (cfg/app-config)
+          output-topic (:kafka-producer-topic opts)
+          kafka-producer-config (-> opts cfg/kafka-config)
+          producer (jc/producer kafka-producer-config)]
+      (letfn [(process-local-drop-message
+                [message]
+                (log/info {:fn :process-local-drop-message :message message})
+                (let [output-messages (stream/process-clinvar-drop2
+                                       message
+                                       {:storage-protocol "file://"})]
+                  ;; Realize whole lazy seq into memory
+                  ;; TODO remove
+                  (doall output-messages)
+                  (run! (fn [m]
+                          (log/info {:msg "Sending message" :message m})
+                          (stream/send-update-to-exchange producer output-topic m))
+                        output-messages)))]
+        (run! process-local-drop-message drop-messages)))))
 
 (defn -main
   "Must provide argument map with :root-dir and :topic-name.
@@ -140,7 +165,7 @@ Usage from REPL:
         dsp-topic (str "broad-dsp-clinvar-" dataset-name)
         clinvar-raw-topic (str "clinvar-raw-" dataset-name)
         drop-messages (generate-drop-messages {:root-dir root-dir})
-        jackdaw-messages (map (fn [m] {:key   (:release_date m)
+        jackdaw-messages (map (fn [m] {:key (:release_date m)
                                        :value m})
                               drop-messages)]
     (save-to-topic-file jackdaw-messages (str dsp-topic ".topic"))
@@ -159,18 +184,24 @@ Usage from REPL:
     ;(.start (Thread. (partial raw-core/-main)))
 
     (let [app-config (-> (cfg/app-config)
+                         (assoc :kafka-reset-consumer-offset true)
                          (assoc :kafka-consumer-topic dsp-topic)
                          (assoc :kafka-producer-topic clinvar-raw-topic)
-                         (assoc :storage-protocol "file://")
-                         )
-          kafka-config (cfg/kafka-config app-config)]
+                         (assoc :storage-protocol "file://"))
+          kafka-config (-> app-config
+                           (cfg/kafka-config)
+                           ;(dissoc "group.id")
+                           )]
       (reset! stream/send-update-to-exchange-counter 0)
+      ;; Read messages from channel and process the files and add to producer channel
       (.start (Thread. (partial
-                         stream/process-drop-messages app-config)))
+                        stream/process-drop-messages app-config)))
+      ;; Take messages from the producer channel and send them to the output topic
       (.start (Thread. (partial
-                         stream/send-producer-messages app-config kafka-config)))
+                        stream/send-producer-messages app-config kafka-config)))
+      ;; Read drop messages from dsp topic
       (.start (Thread. (partial
-                         stream/listen-for-clinvar-drop app-config kafka-config)))
+                        stream/listen-for-clinvar-drop app-config kafka-config)))
 
       (log/info "Waiting for " (count jackdaw-messages)
                 " to be sent to output topic" clinvar-raw-topic)
@@ -186,7 +217,4 @@ Usage from REPL:
       (Thread/sleep 10000)
 
       (reset! stream/listening-for-drop false)
-      (async/close! stream/producer-channel)
-      )
-
-    ))
+      (async/close! stream/producer-channel))))
