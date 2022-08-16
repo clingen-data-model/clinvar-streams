@@ -19,7 +19,7 @@ Usage from REPL:
             [jackdaw.data :as jd]
             [taoensso.timbre :as log]
             [clinvar-raw.config :as cfg])
-  (:import [java.io File]
+  (:import (java.io File)
            (java.text SimpleDateFormat)
            (java.util TimeZone)
            (java.time Duration))
@@ -125,11 +125,13 @@ Usage from REPL:
       ;(jc/send! producer (jd/map->ProducerRecord jackdaw-message))
       )))
 
-(defn -main2
+(defn -main
+  "Must provide argument map with :root-dir and :topic-name.
+
+  Example: {:root-dir \"./test/clinvar_raw/testdata_20201021\" :topic-name \"broad-dsp-clinvar-testdata-20201021\"}"
   [{:keys [root-dir]}]
   (let [dataset-name (.getName (io/file root-dir))
         dsp-topic (str "broad-dsp-clinvar-" dataset-name)
-        ;clinvar-raw-topic (str "clinvar-raw-" dataset-name)
         drop-messages (generate-drop-messages {:root-dir root-dir})
         jackdaw-messages (map (fn [m] {:key (:release_date m)
                                        :value m})
@@ -144,7 +146,7 @@ Usage from REPL:
       (letfn [(process-local-drop-message
                 [message]
                 (log/info {:fn :process-local-drop-message :message message})
-                (let [output-messages (stream/process-clinvar-drop2
+                (let [output-messages (stream/process-clinvar-drop
                                        message
                                        {:storage-protocol "file://"})]
                   ;; Realize whole lazy seq into memory
@@ -155,66 +157,3 @@ Usage from REPL:
                           (stream/send-update-to-exchange producer output-topic m))
                         output-messages)))]
         (run! process-local-drop-message drop-messages)))))
-
-(defn -main
-  "Must provide argument map with :root-dir and :topic-name.
-
-  Example: {:root-dir \"./test/clinvar_raw/testdata_20201021\" :topic-name \"broad-dsp-clinvar-testdata-20201021\"}"
-  [{:keys [root-dir]}]
-  (let [dataset-name (.getName (io/file root-dir))
-        dsp-topic (str "broad-dsp-clinvar-" dataset-name)
-        clinvar-raw-topic (str "clinvar-raw-" dataset-name)
-        drop-messages (generate-drop-messages {:root-dir root-dir})
-        jackdaw-messages (map (fn [m] {:key (:release_date m)
-                                       :value m})
-                              drop-messages)]
-    (save-to-topic-file jackdaw-messages (str dsp-topic ".topic"))
-    (upload-to-topic jackdaw-messages
-                     (raw-config/kafka-config (raw-config/app-config))
-                     dsp-topic)
-    ; Might block if # msg is more than size of raw-core/producer-channel (1000)
-    ;(.start (Thread. (partial process-local-drop-messages drop-messages)))
-    ;(let [producer-messages (chan-get-available! raw-core/producer-channel)]
-    ;  (save-to-topic-file producer-messages (str topic-name ".topic"))
-    ;  (log/info "Uploading " (count producer-messages) " to " topic-name)
-    ;  (upload-to-topic producer-messages
-    ;                   (raw-config/kafka-config raw-config/app-config)
-    ;                   topic-name))
-
-    ;(.start (Thread. (partial raw-core/-main)))
-
-    (let [app-config (-> (cfg/app-config)
-                         (assoc :kafka-reset-consumer-offset true)
-                         (assoc :kafka-consumer-topic dsp-topic)
-                         (assoc :kafka-producer-topic clinvar-raw-topic)
-                         (assoc :storage-protocol "file://"))
-          kafka-config (-> app-config
-                           (cfg/kafka-config)
-                           ;(dissoc "group.id")
-                           )]
-      (reset! stream/send-update-to-exchange-counter 0)
-      ;; Read messages from channel and process the files and add to producer channel
-      (.start (Thread. (partial
-                        stream/process-drop-messages app-config)))
-      ;; Take messages from the producer channel and send them to the output topic
-      (.start (Thread. (partial
-                        stream/send-producer-messages app-config kafka-config)))
-      ;; Read drop messages from dsp topic
-      (.start (Thread. (partial
-                        stream/listen-for-clinvar-drop app-config kafka-config)))
-
-      (log/info "Waiting for " (count jackdaw-messages)
-                " to be sent to output topic" clinvar-raw-topic)
-      (while (not= (:value @stream/last-received-clinvar-drop)
-                   (json/generate-string (:value (last jackdaw-messages))))
-        (log/infof "Sent %d messages so far" @stream/send-update-to-exchange-counter)
-        (log/info "Last drop received" @stream/last-received-clinvar-drop)
-        (Thread/sleep 3000))
-
-      ; Probably not necessary
-      ; Closing channel still lets it exhaust rest of channel
-      (log/info "Waiting 10 seconds")
-      (Thread/sleep 10000)
-
-      (reset! stream/listening-for-drop false)
-      (async/close! stream/producer-channel))))
