@@ -17,7 +17,7 @@ RUN lein uberjar
 
 # Using image without lein for deployment.
 FROM openjdk:11
-MAINTAINER Kyle Ferriter <kferrite@broadinstitute.org>
+LABEL maintainer="Kyle Ferriter <kferrite@broadinstitute.org>"
 
 RUN apt-get update && apt-get install sqlite3
 COPY --from=builder /app/target/uberjar/clinvar-streams.jar /app/clinvar-streams.jar
