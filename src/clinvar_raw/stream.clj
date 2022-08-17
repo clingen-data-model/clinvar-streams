@@ -135,43 +135,46 @@
           values))
 
 (defn process-clinvar-drop
-  "Parses and processes the clinvar drop notification from dsp, returns a seq of output messages"
-  [msg {:keys [storage-protocol]
-        :or {storage-protocol "gs://"}}]
+  "Parses and processes the clinvar drop notification from upstream DSP service.
+   Calls callback-fn on each resulting output message."
+  [msg callback-fn {:keys [storage-protocol]
+                    :or {storage-protocol "gs://"}}]
   ; 1. parse the drop message to determine where the files are
   ; this will return the folder and bucket and file manifest
   (log/debug {:fn :process-clinvar-drop :msg "Processing drop message" :drop-message msg})
   (let [parsed-drop-record (if (string? msg) (json/parse-string msg true) msg)
         release-date (:release_date parsed-drop-record)]
-    (flatten
-     ; Output start sentinel
-     [(create-sentinel-message release-date :start)
+    ; Output start sentinel
+    (callback-fn (create-sentinel-message release-date :start))
 
-      ;; TODO verify all entries in manifest are processed else warning and logging on unknown files.
-      ;; 2. process the folder structure in order of tables for create-update and then reverse for deletes
-      ;; An event procedure per: add, update, delete
-      (for [procedure event-procedures]
-        (do (log/info {:msg "Starting to process procedure" :procedure procedure})
-            (let [bucket (:bucket parsed-drop-record)
-                  files (filter-files (:filter-string procedure) (:files parsed-drop-record))]
-              (log/info {:msg "Processing files for procedure" :bucket bucket :files files})
-              (for [record-type (:order procedure)]
-                (for [file-path (filter-files (:type record-type) files)]
-                  (do (log/info "Reading file: " file-path)
-                      (with-open [file-reader (construct-reader storage-protocol
-                                                                bucket
-                                                                file-path)]
-                        (->> (read-newline-json {:reader file-reader})
-                             (filter-by-field (-> record-type :filter :field)
-                                              (-> record-type :filter :value))
-                             (map #(line-map-to-event %
-                                                      (:type record-type)
-                                                      release-date
-                                                      (:event-type procedure)))
-                             doall))))))))
+    ;; TODO verify all entries in manifest are processed else warning and logging on unknown files.
+    ;; 2. process the folder structure in order of tables for create-update and then reverse for deletes
+    ;; An event procedure per: add, update, delete
+    ;; Don't care about return, just want to execute it all
+    (doseq [procedure event-procedures]
+      (log/info {:msg "Starting to process procedure" :procedure procedure})
+      (let [bucket (:bucket parsed-drop-record)
+            files (filter-files (:filter-string procedure) (:files parsed-drop-record))]
+        (log/info {:msg "Processing files for procedure" :bucket bucket :files files})
+        (doseq [record-type (:order procedure)]
+          (doseq [file-path (filter-files (:type record-type) files)]
+            (log/info "Reading file: " file-path)
+            (with-open [file-reader (construct-reader storage-protocol
+                                                      bucket
+                                                      file-path)]
+              (dorun (->> (read-newline-json {:reader file-reader})
+                          (filter-by-field (-> record-type :filter :field)
+                                           (-> record-type :filter :value))
+                          (map #(line-map-to-event %
+                                                   (:type record-type)
+                                                   release-date
+                                                   (:event-type procedure)))
+                          (map callback-fn)
+                          #_((fn [output-messages]
+                               (dorun (map callback-fn output-messages)))))))))))
 
-      ; Output end sentinel
-      (create-sentinel-message release-date :end)])))
+    ; Output end sentinel
+    (callback-fn (create-sentinel-message release-date :end))))
 
 (defn dissoc-nil-values
   "Removes keys from maps for which the value is nil."
@@ -207,9 +210,14 @@
          (let [msgs (jc/poll consumer 100)]
            (doseq [m msgs]
              (log/tracef "Received message: %s" m)
-             (let [output-messages (process-clinvar-drop (:value m)
-                                                         (select-keys opts [:storage-protocol]))]
-               (log/info "Finished processing clinvar drop")
-               (log/info "Sending messages to output topic")
-               (doseq [output-m output-messages]
-                 (send-update-to-exchange producer output-topic output-m))))))))))
+             (letfn [(callback-fn [output-m]
+                       (send-update-to-exchange producer output-topic output-m))]
+               (process-clinvar-drop (:value m)
+                                     callback-fn
+                                     (select-keys opts [:storage-protocol])))
+             #_(let [output-messages (process-clinvar-drop (:value m)
+                                                           (select-keys opts [:storage-protocol]))]
+                 (log/info "Finished processing clinvar drop")
+                 (log/info "Sending messages to output topic")
+                 (doseq [output-m output-messages]
+                   (send-update-to-exchange producer output-topic output-m))))))))))
