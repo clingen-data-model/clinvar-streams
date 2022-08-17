@@ -29,11 +29,9 @@
       {:release_date release-date
        :event_type "created"
        :content (assoc
-                  (json/parse-string (slurp "test/clinvar_raw/resources/drop_files/created/good/gene.json") true)
-                  :entity_type "gene"
-                  :clingen_version 0)}
-      }]
-    }
+                 (json/parse-string (slurp "test/clinvar_raw/resources/drop_files/created/good/gene.json") true)
+                 :entity_type "gene"
+                 :clingen_version 0)}}]}
    :variation ""
    :gene_association ""
    :variation_archive ""
@@ -47,14 +45,12 @@
    :clinical_assertion_trait ""
    :clinical_assertion_trait_set ""
    :clinical_assertion_observation ""
-   :trait_mapping ""
-   })
+   :trait_mapping ""})
 
 (defn get-drop-file-records [entity-type]
   (let [contents (slurp (str "test/clinvar_raw/resources/drop_files/created/good/" (str entity-type ".json")))
         lines (s/split-lines contents)]
-    (filter #(< 0 (.length %)) lines)
-    ))
+    (filter #(< 0 (.length %)) lines)))
 
 (def clinical-assertion-event {:key "clinical_assertion_SCV000924344_2020-01-01T12:00:00Z",
                                :data
@@ -125,8 +121,7 @@
       (let [actual-value (stream/line-map-to-event (json/parse-string line true) entity-type datetime event-type)]
         (is (= expected-value actual-value)
             (str "Expected did not match actual: "
-                 (into [] (diff expected-value actual-value)))))
-      )))
+                 (into [] (diff expected-value actual-value))))))))
 
 (deftest test-filter-files
   (let [entity-types (map #(name %) (keys drop-file-records))
@@ -138,42 +133,32 @@
           (is (util/match-every? path-seg filtered)
               (str "All entries should contain " path-seg))
           (is (= 1 (count filtered))
-              "Filtered list should have only 1 element")
-          ))
-      )
+              "Filtered list should have only 1 element"))))
     (testing "Testing filter-files on non-existent entity-types"
-      (is (= [] (stream/filter-files "fake-entity" file-list)))
-      )
+      (is (= [] (stream/filter-files "fake-entity" file-list))))
     (testing "Testing filter-files on other path segments"
       (is (= [] (stream/filter-files "2020-04-01" file-list)))
       (is (util/unordered-eq? file-list (stream/filter-files "created" file-list)))
-      (is (= [] (stream/filter-files "00000000" file-list)))
-      )
-    )
-  )
+      (is (= [] (stream/filter-files "00000000" file-list))))))
 
-(deftest test-process-clinvar-drop-file
-  (testing "Testing filter-files on non-existent entity-types"
+#_(deftest test-process-clinvar-drop-file
+    (testing "Testing filter-files on non-existent entity-types"
     ; Returns line-to-event for each line in drop file
-    (let [;entity-types (map #(name %) (keys drop-file-records))
-          entity-types ["gene"]
-          ]
+      (let [;entity-types (map #(name %) (keys drop-file-records))
+            entity-types ["gene"]]
       ; For each file, open a reader and run process-clinvar-drop-file on it
       ; check return seq value literals
-      (doseq [entity-type entity-types]
-        (with-open [r (io/reader (str "test/clinvar_raw/resources/drop_files/created/good/" entity-type ".json"))]
-          (let [expected-value (:processed-clinvar-drop ((keyword entity-type) drop-file-records))]
-            (stream/process-clinvar-drop-file {:reader r
-                                             :entity-type entity-type
-                                             :release_date release-date
-                                             :event-type "created"
-                                             :filter-field nil})
-            (Thread/sleep 100)                              ; TODO put spin
-            (let [actual-value (<!! (async/into [] (async/take (count expected-value) stream/producer-channel)))]
-              (println actual-value)
-              (is (= expected-value actual-value)
-                  (str "Expected did not match actual: "
-                       (into [] (diff expected-value actual-value)))
-                  ))
-            ))))
-    ))
+        (doseq [entity-type entity-types]
+          (with-open [r (io/reader (str "test/clinvar_raw/resources/drop_files/created/good/" entity-type ".json"))]
+            (let [expected-value (:processed-clinvar-drop ((keyword entity-type) drop-file-records))]
+              (stream/process-clinvar-drop-file {:reader r
+                                                 :entity-type entity-type
+                                                 :release_date release-date
+                                                 :event-type "created"
+                                                 :filter-field nil})
+              (Thread/sleep 100)                              ; TODO put spin
+              (let [actual-value (<!! (async/into [] (async/take (count expected-value) stream/producer-channel)))]
+                (println actual-value)
+                (is (= expected-value actual-value)
+                    (str "Expected did not match actual: "
+                         (into [] (diff expected-value actual-value)))))))))))
