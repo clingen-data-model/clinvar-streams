@@ -4,7 +4,7 @@
   (:import java.lang.System)
   (:gen-class))
 
-(timbre/set-level! :debug)
+(timbre/set-level! :info)
 
 (defn remove-nil-values [m]
   (into {} (filter #(not= nil (second %)) m)))
@@ -16,7 +16,7 @@
    :kafka-password (util/get-env-required "KAFKA_PASSWORD")
    :kafka-group (System/getenv "KAFKA_GROUP")
    :kafka-consumer-topic (util/get-env-required "DX_CV_RAW_INPUT_TOPIC")
-   :kafka-producer-topic (util/get-env-required "DX_CV_RAW_OUTPUT_TOPIC")
+   :kafka-producer-topic (System/getenv "DX_CV_RAW_OUTPUT_TOPIC")
    :kafka-reset-consumer-offset (Boolean/valueOf (System/getenv "KAFKA_RESET_CONSUMER_OFFSET"))})
 
 (defn kafka-config
@@ -35,6 +35,10 @@
     "key.deserializer" "org.apache.kafka.common.serialization.StringDeserializer"
     "value.deserializer" "org.apache.kafka.common.serialization.StringDeserializer"
     "group.id" (:kafka-group opts)
+    ;; One hour in milliseconds
+    "max.poll.interval.ms" "3600000"
+    ;; Poll one record at a time. Ensures more timely offset commits.
+    "max.poll.records" "1"
     "sasl.jaas.config" (str "org.apache.kafka.common.security.plain.PlainLoginModule required username=\""
                             (:kafka-user opts) "\" password=\"" (:kafka-password opts) "\";")}))
 
