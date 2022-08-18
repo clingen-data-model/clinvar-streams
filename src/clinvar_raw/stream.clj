@@ -7,6 +7,7 @@
             [cheshire.core :as json]
             [clinvar-raw.config :as cfg])
   (:import (com.google.cloud.storage Storage StorageOptions BlobId Blob)
+           (java.time Duration)
            com.google.cloud.storage.Blob$BlobSourceOption
            java.nio.channels.Channels
            java.io.BufferedReader))
@@ -45,7 +46,7 @@
   "Sends a message to the producer on `topic`, with the message key `key`, and payload `data`
   `data` can be a string or json-serializable object like a map"
   [producer topic {:keys [key value]}]
-  (log/infof "Sending message with key %s to topic %s" key topic)
+  (log/tracef "Sending message with key %s to topic %s" key topic)
   (jc/send! producer (jd/->ProducerRecord {:topic-name topic}
                                           key
                                           (if (string? value) value (json/generate-string value))))
@@ -111,11 +112,6 @@
 
 (def listening-for-drop (atom true))
 
-(defn future-realized? [ftr sym]
-  (let [r (realized? ftr)]
-    (log/info {:fn :future-realized? :msg (format "(realized? %s) = %s" sym r)})
-    r))
-
 (defn read-newline-json
   [{:keys [reader file-read-limit]
     :or {file-read-limit ##Inf}}]
@@ -141,7 +137,7 @@
                     :or {storage-protocol "gs://"}}]
   ; 1. parse the drop message to determine where the files are
   ; this will return the folder and bucket and file manifest
-  (log/debug {:fn :process-clinvar-drop :msg "Processing drop message" :drop-message msg})
+  (log/info {:fn :process-clinvar-drop :msg "Processing drop message" :drop-message msg})
   (let [parsed-drop-record (if (string? msg) (json/parse-string msg true) msg)
         release-date (:release_date parsed-drop-record)]
     ; Output start sentinel
@@ -158,20 +154,20 @@
         (log/info {:msg "Processing files for procedure" :bucket bucket :files files})
         (doseq [record-type (:order procedure)]
           (doseq [file-path (filter-files (:type record-type) files)]
-            (log/info "Reading file: " file-path)
+            (log/info "Opening file: " (str bucket "/" file-path))
             (with-open [file-reader (construct-reader storage-protocol
                                                       bucket
                                                       file-path)]
-              (dorun (->> (read-newline-json {:reader file-reader})
-                          (filter-by-field (-> record-type :filter :field)
-                                           (-> record-type :filter :value))
-                          (map #(line-map-to-event %
-                                                   (:type record-type)
-                                                   release-date
-                                                   (:event-type procedure)))
-                          (map callback-fn)
-                          #_((fn [output-messages]
-                               (dorun (map callback-fn output-messages)))))))))))
+              (log/info "Iterating over file: " (str bucket "/" file-path))
+              (doseq [output-message
+                      (->> (read-newline-json {:reader file-reader})
+                           (filter-by-field (-> record-type :filter :field)
+                                            (-> record-type :filter :value))
+                           (map #(line-map-to-event %
+                                                    (:type record-type)
+                                                    release-date
+                                                    (:event-type procedure))))]
+                (callback-fn output-message)))))))
 
     ; Output end sentinel
     (callback-fn (create-sentinel-message release-date :end))))
@@ -205,19 +201,15 @@
        (when (:kafka-reset-consumer-offset opts)
          (log/info "Resetting to start of input topic")
          (jc/seek-to-beginning-eager consumer))
-       (log/debug "Subscribed to consumer topic " (:kafka-consumer-topic opts))
+       (log/info "Subscribed to consumer topic " (:kafka-consumer-topic opts))
        (while @listening-for-drop
-         (let [msgs (jc/poll consumer 100)]
+         (let [msgs (jc/poll consumer (Duration/ofSeconds 5))]
+           (when (not (empty? msgs))
+             (log/info "Received poll batch of size: " (count msgs)))
            (doseq [m msgs]
-             (log/tracef "Received message: %s" m)
+             (log/infof "Received drop message: %s" m)
              (letfn [(callback-fn [output-m]
                        (send-update-to-exchange producer output-topic output-m))]
                (process-clinvar-drop (:value m)
                                      callback-fn
-                                     (select-keys opts [:storage-protocol])))
-             #_(let [output-messages (process-clinvar-drop (:value m)
-                                                           (select-keys opts [:storage-protocol]))]
-                 (log/info "Finished processing clinvar drop")
-                 (log/info "Sending messages to output topic")
-                 (doseq [output-m output-messages]
-                   (send-update-to-exchange producer output-topic output-m))))))))))
+                                     (select-keys opts [:storage-protocol]))))))))))
