@@ -62,28 +62,35 @@
   "max function but using Object.compareTo. vals must be homogeneous types.
   nils are ignored."
   [& vals]
-  (if (or (nil? vals) (= 0 (count vals))) nil)
-  (let [vals (filter #(not= nil %) vals)]
-    (loop [max-val (first vals)
-           to-check (rest vals)]
-      (if (empty? to-check)
-        max-val
-        (recur
-         (if (< 0 (.compareTo (first to-check) max-val))
-           (first to-check)
-           max-val)
-         (rest to-check))))))
+  (letfn [(first-greater? [a b] (< 0 (.compareTo a b)))
+          (obj-max-2 [a b] (if (first-greater? a b) a b))]
+    (reduce obj-max-2 (filter (comp not nil?) vals))))
 
-(defn simplify-dollar-map [m]
+(defn select-keys-nested
+  "Same as select-keys, but elements of keyvals can be a seq passable to get-in.
+   Keeps the same nesting structure specified in the keyval.
+   Example:
+   (select-keys-nested {:a {:b {:c 3 :d 4}} :e 5} [[:a :b :c]])
+   -> {:a {:b {:c 3}}}
+   "
+  [m keyvals]
+  (reduce (fn [agg k]
+            (cond (sequential? k) (assoc-in agg k (get-in m k))
+                  :else (assoc agg k (get m k))))
+          {} keyvals))
+
+(defn simplify-dollar-map
   "Return (get m :$) if m is a map and :$ is the only key. Otherwise return m.
   Useful for BigQuery JSON serialization where single values may be turned into $ maps"
+  [m]
   (if (and (map? m)
            (= '(:$) (keys m)))
     (:$ m)
     m))
 
-(defn as-vec-if-not [val]
+(defn as-vec-if-not
   "If val is not a sequential collection (maps, sets, strings are not), return it in a vector."
+  [val]
   ; strings are already not sequential, but it feels safer to be explicit
   (if (and (not (string? val))
            (sequential? val))
