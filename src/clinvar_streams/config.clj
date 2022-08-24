@@ -8,8 +8,7 @@
 
 (def topic-metadata
   {:input
-   {
-    ;:topic-name         "clinvar-raw"
+   {;:topic-name         "clinvar-raw"
     :topic-name         "clinvar-raw"
     :partition-count    1
     :replication-factor 1
@@ -27,6 +26,7 @@
    :kafka-user     (System/getenv "KAFKA_USER")
    :kafka-password (System/getenv "KAFKA_PASSWORD")
    :kafka-group    (System/getenv "KAFKA_GROUP")
+   :data-directory (System/getenv "CLINVAR_STREAMS_DATA_DIR")
    ;:db-password    (System/getenv "CLINVAR_DB_PASSWORD")
    ;:db-user        (System/getenv "CLINVAR_DB_USER")
    ;:db-host        (or (System/getenv "CLINVAR_DB_HOST") "localhost")

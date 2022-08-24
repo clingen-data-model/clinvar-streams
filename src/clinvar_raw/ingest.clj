@@ -1,6 +1,7 @@
 (ns clinvar-raw.ingest
   "Compare weird JSON-encoded XML messages."
   (:require [clinvar-raw.debug :as d]
+            [clinvar-streams.storage.rocksdb :as rocksdb]
             [clojure.data.json :as json]
             [clojure.zip       :as zip]))
 
@@ -54,3 +55,9 @@
         was-edn (disorder was)]
     (when-not (= now-edn was-edn)
       (hash now-edn))))
+
+(rocksdb/open "clinvar-raw-dedup.db")
+
+(defn duplicate?
+  "Takes a map M, returns true if has been seen before"
+  [m])
