@@ -53,7 +53,7 @@
   (swap! send-update-to-exchange-counter inc))
 
 (defn google-storage-line-reader
-  "Returns a reader to the storage object. Caller must open (with-open)"
+  "Returns an open reader to the storage object in `bucket` with path `filename`."
   [bucket filename]
   (log/debugf "Opening gs://%s/%s" bucket filename)
   (let [blob-id (BlobId/of bucket filename)
@@ -62,7 +62,12 @@
     (-> blob (.reader (make-array Blob$BlobSourceOption 0)) (Channels/newReader "UTF-8") BufferedReader.)))
 
 (defn line-map-to-event
-  "Parses a single line of a drop file, transforms into an event object map"
+  "Parses a single line of a drop file, transforms into an event object map
+   `line-map` is one parsed JSON object read in from a clinvar diff file.
+   `entity-type` is a type like 'variation', 'gene', etc, from clinvar.
+   `release_date` is the date string to attach to the event message.
+       Should be the date the object appeared in clinvar.
+   `event-type` is one of: create, update, delete."
   [line-map entity-type release_date event-type]
 
   (let [content (-> line-map
@@ -172,21 +177,6 @@
     ; Output end sentinel
     (callback-fn (create-sentinel-message release-date :end))))
 
-(defn dissoc-nil-values
-  "Removes keys from maps for which the value is nil."
-  [input-map]
-  (apply dissoc input-map (filter #(= nil (get input-map %)) (keys input-map))))
-
-(defn dissoc-nil-values-recur
-  "Removes keys from maps for which the value is nil. Recurses with clojure.walk/postwalk"
-  [input-map]
-  (postwalk #(if (map? %) (dissoc-nil-values %) %) input-map))
-
-(defn select-keys-if
-  "Same as select-keys, except only selects a given key k if the value of (get m k) is not nil"
-  [m keys]
-  (->> (select-keys m keys)
-       dissoc-nil-values))
 
 (defn start
   ([]

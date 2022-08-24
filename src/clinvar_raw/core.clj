@@ -12,17 +12,6 @@
   (:gen-class))
 
 
-#_(defn -main-unsafe
-    [& args]
-    (.start (Thread. (partial stream/process-drop-messages (cfg/app-config))))
-    (.start (Thread. (partial stream/send-producer-messages
-                              (cfg/app-config)
-                              (cfg/kafka-config (cfg/app-config)))))
-
-    (stream/listen-for-clinvar-drop
-     (cfg/app-config)
-     (cfg/kafka-config (cfg/app-config))))
-
 (defn -main [& args]
   (mount.core/start #'clinvar-raw.service/service)
   (stream/start))
