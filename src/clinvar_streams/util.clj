@@ -66,6 +66,21 @@
           (obj-max-2 [a b] (if (first-greater? a b) a b))]
     (reduce obj-max-2 (filter (comp not nil?) vals))))
 
+(defn apply-to-if
+  "Returns TO with F applied using ARGS appended with V, if V is not nil
+   Examples:
+   This will do (assoc {:a 1} :b v) but only if v is not nil,
+   otherwise it will return the original map {:a 1}
+   (apply-to-if {:a 1} assoc [:b] v)
+
+   This can also be used for assoc-in
+   (apply-to-if m assoc-in [[:c :d]] v)
+   "
+  [to f args v]
+  (if ((comp not nil?) v)
+    (apply f to (concat args [v]))
+    to))
+
 (defn select-keys-nested
   "Same as select-keys, but elements of keyvals can be a seq passable to get-in.
    Keeps the same nesting structure specified in the keyval.
@@ -75,8 +90,10 @@
    "
   [m keyvals]
   (reduce (fn [agg k]
-            (cond (sequential? k) (assoc-in agg k (get-in m k))
-                  :else (assoc agg k (get m k))))
+            (cond (sequential? k) (if (not (nil? (get-in m k)))
+                                    (assoc-in agg k (get-in m k)) agg)
+                  :else (if (not (nil? (get m k)))
+                          (assoc agg k (get m k)) agg)))
           {} keyvals))
 
 (defn simplify-dollar-map
