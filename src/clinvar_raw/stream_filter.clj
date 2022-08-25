@@ -5,7 +5,9 @@
             [clojure.java.io :as io]
             [jackdaw.client :as jc]
             [taoensso.timbre :as log])
-  (:import (java.time Duration)))
+  (:import (java.time Duration)
+           (java.io File FileInputStream)
+           (java.util.zip GZIPInputStream)))
 
 #_(defn topic-lazyseq
     [{topic-name :topic-name
@@ -24,6 +26,11 @@
         (and (= "variation_archive" entity-type)
              (contains? id-set (-> msg :content :variation_id str))))))
 
+(defn predicate-entity-type-in
+  "Takes a clinvar-raw message and ENTITY-TYPES-SET (a set). If msg :entity_type
+   is one of ENTITY-TYPES-SET, return true."
+  [msg entity-types-set]
+  (contains? entity-types-set (-> msg :content :entity_type)))
 
 (defn -main [& args]
   (let [app-config (cfg/app-config)
@@ -65,3 +72,26 @@
                     (dorun (map #(do (.write writer %)
                                      (.write writer "\n"))
                                 (map json/generate-string filtered))))))))))))
+
+(defn gzip-file-reader
+  "Open FILE-NAME as a reader to a GZIPInputStream"
+  [file-name]
+  (-> file-name File. FileInputStream. GZIPInputStream. io/reader))
+
+;; TODO write some functions to abstract reading from a KafkaConsumer
+;; and reading from a file
+(defn -main-file [& args]
+  (let [input-filename "clinvar-raw.gz"
+        output-filename "clinvar-raw-local-filtered.txt"
+
+        variation-ids (-> "vcepvars-220801.txt" io/reader line-seq set)
+        entity-types-include-all (set [:trait :trait_set])]
+    (with-open [reader (gzip-file-reader input-filename)
+                writer (io/writer output-filename)]
+      (doseq [line (-> reader
+                       line-seq
+                       (->> (map #(json/parse-string % true))
+                            (filter #(or (predicate-entity-type-in % entity-types-include-all)
+                                         (predicate-variation-id-in % variation-ids)))))]
+        (do (.write writer (json/generate-string line))
+            (.write writer "\n"))))))
