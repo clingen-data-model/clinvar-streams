@@ -1,8 +1,7 @@
 (ns clinvar-raw.config
-  (:require [taoensso.timbre :as timbre]
-            [clinvar-streams.util :as util])
-  (:import java.lang.System)
-  (:gen-class))
+  (:require [clinvar-streams.util :as util]
+            [taoensso.timbre :as timbre])
+  (:import java.lang.System))
 
 (timbre/set-level! :info)
 

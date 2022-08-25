@@ -27,7 +27,7 @@
                  [nrepl "0.8.3"]
                  [org.postgresql/postgresql "42.2.16"]
                  [org.xerial/sqlite-jdbc "3.32.3.2"]]
-  :repl-options {:init-ns clinvar-combiner.core
+  :repl-options {:init-ns clinvar-raw.deduplicator
                  :caught clojure.repl/pst}
   :jvm-opts ["-Xms256m" "-XX:MaxRAMPercentage=50"]
   :main clinvar-streams.core

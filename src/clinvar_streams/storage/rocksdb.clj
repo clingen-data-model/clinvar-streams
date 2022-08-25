@@ -4,6 +4,7 @@
 (ns clinvar-streams.storage.rocksdb
   (:require [taoensso.nippy :as nippy :refer [freeze thaw]]
             [clinvar-streams.config :refer [app-config]]
+            [clojure.java.io :as io]
             [digest])
   (:import (org.rocksdb RocksDB Options ReadOptions Slice RocksIterator)
            java.security.MessageDigest
@@ -20,6 +21,7 @@
         opts (-> (Options.)
                  (.setCreateIfMissing true))]
     ;; todo add logging...
+    (io/make-parents full-path)
     (RocksDB/open opts full-path)))
 
 (defn- key-digest [k]

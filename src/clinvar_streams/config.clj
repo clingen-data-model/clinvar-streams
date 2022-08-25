@@ -4,7 +4,6 @@
   (:import java.lang.System)
   (:gen-class))
 
-(timbre/set-level! :debug)
 
 (def topic-metadata
   {:input
