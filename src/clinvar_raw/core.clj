@@ -6,12 +6,13 @@
             [taoensso.timbre :as log]
             [clinvar-raw.config :as cfg]
             [clinvar-raw.stream :as stream]
-            [clinvar-raw.service])
-  (:import (java.lang Thread)
-           (java.time Duration))
-  (:gen-class))
+            [clinvar-raw.service]
+            [clinvar-raw.ingest]))
 
+(defn start-states! []
+  (mount.core/start #'clinvar-raw.ingest/dedup-db
+                    #'clinvar-raw.service/service))
 
 (defn -main [& args]
-  (mount.core/start #'clinvar-raw.service/service)
+  (start-states!)
   (stream/start))

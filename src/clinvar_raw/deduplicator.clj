@@ -36,6 +36,7 @@
           (when (seq batch)
             (swap! input-counter #(+ % (count batch)))
             (let [deduplicated-batch (filter
+                                      ;; TODO store-new
                                       #(not (ingest/duplicate? %))
                                       batch)]
               (swap! output-counter #(+ % (count deduplicated-batch)))
@@ -81,9 +82,14 @@
                              (if (not mdup?)
                                (do (swap! output-counter inc)
                                    m)
+                               ;; A when statement returns nil if not, so maybe don't need this explicit nil return
                                nil)))))]
-        (.write writer (json/generate-string out-m))
-        (.write writer "\n"))
+
+        (let [;; Put the nested content back in a string
+              out-m (assoc-in out-m [:content :content]
+                              (json/generate-string (-> out-m :content :content)))]
+          (.write writer (json/generate-string (-> out-m)))
+          (.write writer "\n")))
       (log/info {:input-counter @input-counter
                  :output-counter @output-counter
                  :create-to-update-counter @create-to-update-counter}))))

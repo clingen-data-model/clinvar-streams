@@ -15,6 +15,7 @@
                  [mount "0.1.16"]
                  [cli-matic "0.4.3"]
                  [cheshire "5.10.0"]
+                 [mount/mount "0.1.16"]
                  [clj-commons/fs "1.5.2"]
                  [fundingcircle/jackdaw "0.7.4"]
                  [com.google.cloud/google-cloud-storage "1.115.0"]

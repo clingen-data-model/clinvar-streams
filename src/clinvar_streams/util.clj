@@ -1,8 +1,10 @@
 (ns clinvar-streams.util
   (:require [clojure.string :as s]
             [clojure.core.async :as async]
+            [clojure.java.io :as io]
             [clojure.set :as set])
-  (:gen-class))
+  (:import (java.io File FileInputStream FileOutputStream)
+           (java.util.zip GZIPInputStream GZIPOutputStream)))
 
 (defn get-env-required
   "Performs System/getenv variable-name, but throws an exception if value is empty"
@@ -122,3 +124,13 @@
       output
       (recur (rest todo)
              (set/union output (into #{} (first todo)))))))
+
+(defn gzip-file-writer
+  "Open FILE-NAME as a writer to a GZIPOutputStream"
+  [file-name]
+  (-> file-name File. FileOutputStream. GZIPOutputStream. io/writer))
+
+(defn gzip-file-reader
+  "Open FILE-NAME as a reader to a GZIPInputStream"
+  [file-name]
+  (-> file-name File. FileInputStream. GZIPInputStream. io/reader))

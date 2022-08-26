@@ -4,6 +4,7 @@
             [clinvar-streams.util :refer [select-keys-nested]]
             [clojure.data.json :as json]
             [clojure.zip       :as zip]
+            [mount.core :refer [defstate]]
             [digest]
             [taoensso.nippy :as nippy]))
 
@@ -58,7 +59,9 @@
     (when-not (= now-edn was-edn)
       (hash now-edn))))
 
-(defonce dedup-db (rocksdb/open "clinvar-raw-dedup.db"))
+(defstate dedup-db
+  :start (rocksdb/open "clinvar-raw-dedup.db")
+  :stop (rocksdb/close dedup-db))
 
 (defn clinvar-concept-identity [message]
   (let [entity-type (-> message :content :entity_type)]
@@ -68,8 +71,7 @@
                                                   [:content :medgen_id]])
       :gene_association (select-keys-nested message [[:content :entity_type]
                                                      [:content :gene_id]
-                                                     [:content :variation_id]
-                                                     [:content :relationship_type]])
+                                                     [:content :variation_id]])
       (select-keys-nested message [[:content :entity_type]
                                    [:content :id]]))))
 
@@ -94,7 +96,8 @@
 
    If the content of m has been seen before but the only difference is that the
    previous was a create and the current is an update, returns :create-to-update.
-   Caller may want to use this to persist the update."
+   Caller may want to use this to persist the update.
+   TODO change keys to sorted vecs and hash"
   [current-m #_{:keys [persist-create-update-dup?]
                 :or {persist-create-update-dup? true}}]
   (let [k (clinvar-concept-identity current-m)

@@ -12,7 +12,7 @@
 
 
 (defn create-db-path [db-name]
-  (let [data-dir (:data-directory app-config)]
+  (let [data-dir (:data-directory (app-config))]
     (assert (not (nil? data-dir)) "Config :data-directory cannot be nil")
     (str data-dir "/" db-name)))
 

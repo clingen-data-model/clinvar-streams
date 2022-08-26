@@ -1,13 +1,13 @@
 (ns clinvar-raw.stream-filter
   (:require [cheshire.core :as json]
             [clinvar-raw.config :as cfg]
-            [clinvar-streams.util :refer [select-keys-nested]]
+            [clinvar-streams.util :refer [select-keys-nested
+                                          gzip-file-reader
+                                          gzip-file-writer]]
             [clojure.java.io :as io]
             [jackdaw.client :as jc]
             [taoensso.timbre :as log])
-  (:import (java.time Duration)
-           (java.io File FileInputStream)
-           (java.util.zip GZIPInputStream)))
+  (:import (java.time Duration)))
 
 #_(defn topic-lazyseq
     [{topic-name :topic-name
@@ -31,6 +31,46 @@
    is one of ENTITY-TYPES-SET, return true."
   [msg entity-types-set]
   (contains? entity-types-set (-> msg :content :entity_type)))
+
+
+(defn topic-download-gzip []
+  (let [app-config (cfg/app-config)
+        kafka-opts (-> (cfg/kafka-config app-config)
+                       (assoc "max.poll.records" "10000"))
+        looping? (atom true)
+        output-filename (str (:kafka-consumer-topic app-config) ".gz")
+        max-empty-batches 10
+        empty-batch-count (atom 0)]
+    (with-open [consumer (jc/consumer kafka-opts)]
+      (jc/subscribe consumer [{:topic-name (:kafka-consumer-topic app-config)}])
+      (jc/poll consumer 0)
+      (jc/seek-to-beginning-eager consumer)
+      (with-open [writer (gzip-file-writer output-filename)]
+        (while @looping?
+          (let [batch (jc/poll consumer (Duration/ofSeconds 10))]
+            (log/infof "Read %s records. First record offset: %s, date: %s"
+                       (count batch)
+                       (-> batch first :offset)
+                       (-> batch first :value
+                           (json/parse-string true)
+                           (select-keys-nested [:release_date
+                                                :event_type
+                                                [:content :entity_type]])
+                           json/generate-string))
+            (if (empty? batch)
+              (if (<= max-empty-batches @empty-batch-count)
+                (reset! looping? false)
+                (do (log/info "No records returned from poll, sleeping 1 minute")
+                    (swap! empty-batch-count inc)
+                    (Thread/sleep (* 1000 60))))
+              (do (reset! empty-batch-count 0)
+                  (let []
+                    (log/infof "Writing %d filtered records" (count batch))
+                    (dorun (map #(do (.write writer %)
+                                     (.write writer "\n"))
+                                (->> batch
+                                     (map #(select-keys % [:offset :value]))
+                                     (map json/generate-string)))))))))))))
 
 (defn -main [& args]
   (let [app-config (cfg/app-config)
@@ -73,10 +113,6 @@
                                      (.write writer "\n"))
                                 (map json/generate-string filtered))))))))))))
 
-(defn gzip-file-reader
-  "Open FILE-NAME as a reader to a GZIPInputStream"
-  [file-name]
-  (-> file-name File. FileInputStream. GZIPInputStream. io/reader))
 
 ;; TODO write some functions to abstract reading from a KafkaConsumer
 ;; and reading from a file

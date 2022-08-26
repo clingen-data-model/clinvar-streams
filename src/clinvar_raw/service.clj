@@ -14,7 +14,8 @@
     (prn-log)
     (reset! stream/listening-for-drop false)
     (Thread/sleep (.toMillis (Duration/ofSeconds 10))))
-  (log/info "Finished shutting down streaming mode.")
+  (log/info (str "Finished shutting down streaming mode."
+                 " Processing thread may continue if a release is in progress."))
   {:status 200
    :headers {}
    :body nil})

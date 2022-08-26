@@ -1,16 +1,16 @@
 (ns clinvar-raw.stream
-  (:require [taoensso.timbre :as log]
-            [jackdaw.data :as jd]
-            [jackdaw.client :as jc]
+  (:require [cheshire.core :as json]
+            [clinvar-raw.config :as cfg]
+            [clinvar-raw.ingest :as ingest]
             [clojure.java.io :as io]
-            [clojure.walk :refer [postwalk]]
-            [cheshire.core :as json]
-            [clinvar-raw.config :as cfg])
-  (:import (com.google.cloud.storage Storage StorageOptions BlobId Blob)
-           (java.time Duration)
+            [jackdaw.client :as jc]
+            [jackdaw.data :as jd]
+            [taoensso.timbre :as log])
+  (:import (com.google.cloud.storage BlobId StorageOptions)
            com.google.cloud.storage.Blob$BlobSourceOption
+           java.io.BufferedReader
            java.nio.channels.Channels
-           java.io.BufferedReader))
+           (java.time Duration)))
 
 (def order-of-processing [{:type "gene"}
                           {:type "variation" :filter {:field :subclass_type :value "SimpleAllele"}}
@@ -43,8 +43,8 @@
 (def send-update-to-exchange-counter (atom (bigint 0)))
 
 (defn send-update-to-exchange
-  "Sends a message to the producer on `topic`, with the message key `key`, and payload `data`
-  `data` can be a string or json-serializable object like a map"
+  "Sends a message to the producer on `topic`, with the message key `key`, and payload `value`
+  `value` can be a string or json-serializable object like a map"
   [producer topic {:keys [key value]}]
   (log/tracef "Sending message with key %s to topic %s" key topic)
   (jc/send! producer (jd/->ProducerRecord {:topic-name topic}
@@ -82,10 +82,6 @@
 (defn create-sentinel-message
   "sentinel-type should be one of :start, :end"
   [release-tag sentinel-type]
-  ;(try (assert (util/in? sentinel-type [:start :end]))
-  ;     (catch AssertionError e
-  ;       (error e)))
-
   {:key (str "release_sentinel_" release-tag)
    :value {:event_type "create"
            :release_date release-tag
@@ -184,7 +180,10 @@
          kafka-opts (cfg/kafka-config opts)]
      (start opts kafka-opts)))
   ([opts kafka-opts]
-   (let [output-topic (:kafka-producer-topic opts)]
+   (let [output-topic (:kafka-producer-topic opts)
+         input-counter (atom (bigint 0))
+         output-counter (atom (bigint 0))
+         create-to-update-counter (atom (bigint 0))]
      (with-open [producer (jc/producer kafka-opts)
                  consumer (jc/consumer kafka-opts)]
        (jc/subscribe consumer [{:topic-name (:kafka-consumer-topic opts)}])
@@ -199,7 +198,19 @@
            (doseq [m msgs]
              (log/infof "Received drop message: %s" m)
              (letfn [(callback-fn [output-m]
-                       (send-update-to-exchange producer output-topic output-m))]
+                       (swap! input-counter inc)
+                       ;; Check the message for false positive updates
+                       (let [mdup? (ingest/duplicate? m)]
+                             ;; If its not a duplicate or it is a duplicate but the
+                             ;; return value is :create-to-update, persist the value of m
+                         (when (= :create-to-update mdup?)
+                           (swap! create-to-update-counter inc))
+                         ;; Store the most recent always, even if duplicate.
+                         ;; Could be useful for analysis or doing further deep diffs.
+                         (ingest/store-new! m)
+                         (when (not mdup?)
+                           (send-update-to-exchange producer output-topic output-m)
+                           (swap! output-counter inc))))]
                (process-clinvar-drop (:value m)
                                      callback-fn
                                      (select-keys opts [:storage-protocol]))))))))))
