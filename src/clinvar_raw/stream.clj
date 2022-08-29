@@ -200,14 +200,14 @@
              (letfn [(callback-fn [output-m]
                        (swap! input-counter inc)
                        ;; Check the message for false positive updates
-                       (let [mdup? (ingest/duplicate? m)]
+                       (let [mdup? (ingest/duplicate? output-m)]
                              ;; If its not a duplicate or it is a duplicate but the
                              ;; return value is :create-to-update, persist the value of m
                          (when (= :create-to-update mdup?)
                            (swap! create-to-update-counter inc))
                          ;; Store the most recent always, even if duplicate.
                          ;; Could be useful for analysis or doing further deep diffs.
-                         (ingest/store-new! m)
+                         (ingest/store-new! output-m)
                          (when (not mdup?)
                            (send-update-to-exchange producer output-topic output-m)
                            (swap! output-counter inc))))]
