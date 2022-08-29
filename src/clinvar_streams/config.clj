@@ -20,7 +20,7 @@
     :key-serde          (j-serde/string-serde)
     :value-serde        (j-serde/string-serde)}})
 
-(def app-config
+(defn app-config []
   {:kafka-host     "pkc-4yyd6.us-east1.gcp.confluent.cloud:9092"
    :kafka-user     (System/getenv "KAFKA_USER")
    :kafka-password (System/getenv "KAFKA_PASSWORD")
