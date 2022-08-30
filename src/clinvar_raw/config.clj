@@ -34,8 +34,8 @@
     "key.deserializer" "org.apache.kafka.common.serialization.StringDeserializer"
     "value.deserializer" "org.apache.kafka.common.serialization.StringDeserializer"
     "group.id" (:kafka-group opts)
-    ;; One hour in milliseconds
-    "max.poll.interval.ms" "3600000"
+    ;; 12 hours in milliseconds
+    "max.poll.interval.ms" "43200000"
     ;; Poll one record at a time. Ensures more timely offset commits.
     "max.poll.records" "1"
     "sasl.jaas.config" (str "org.apache.kafka.common.security.plain.PlainLoginModule required username=\""
