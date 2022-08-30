@@ -1,8 +1,10 @@
 (ns clinvar-streams.util
   (:require [clojure.string :as s]
             [clojure.core.async :as async]
+            [clojure.java.io :as io]
             [clojure.set :as set])
-  (:gen-class))
+  (:import (java.io File FileInputStream FileOutputStream)
+           (java.util.zip GZIPInputStream GZIPOutputStream)))
 
 (defn get-env-required
   "Performs System/getenv variable-name, but throws an exception if value is empty"
@@ -62,28 +64,52 @@
   "max function but using Object.compareTo. vals must be homogeneous types.
   nils are ignored."
   [& vals]
-  (if (or (nil? vals) (= 0 (count vals))) nil)
-  (let [vals (filter #(not= nil %) vals)]
-    (loop [max-val (first vals)
-           to-check (rest vals)]
-      (if (empty? to-check)
-        max-val
-        (recur
-          (if (< 0 (.compareTo (first to-check) max-val))
-            (first to-check)
-            max-val)
-          (rest to-check))))))
+  (letfn [(first-greater? [a b] (< 0 (.compareTo a b)))
+          (obj-max-2 [a b] (if (first-greater? a b) a b))]
+    (reduce obj-max-2 (filter (comp not nil?) vals))))
 
-(defn simplify-dollar-map [m]
+(defn apply-to-if
+  "Returns TO with F applied using ARGS appended with V, if V is not nil
+   Examples:
+   This will do (assoc {:a 1} :b v) but only if v is not nil,
+   otherwise it will return the original map {:a 1}
+   (apply-to-if {:a 1} assoc [:b] v)
+
+   This can also be used for assoc-in
+   (apply-to-if m assoc-in [[:c :d]] v)
+   "
+  [to f args v]
+  (if ((comp not nil?) v)
+    (apply f to (concat args [v]))
+    to))
+
+(defn select-keys-nested
+  "Same as select-keys, but elements of keyvals can be a seq passable to get-in.
+   Keeps the same nesting structure specified in the keyval.
+   Example:
+   (select-keys-nested {:a {:b {:c 3 :d 4}} :e 5} [[:a :b :c]])
+   -> {:a {:b {:c 3}}}
+   "
+  [m keyvals]
+  (reduce (fn [agg k]
+            (cond (sequential? k) (if (not (nil? (get-in m k)))
+                                    (assoc-in agg k (get-in m k)) agg)
+                  :else (if (not (nil? (get m k)))
+                          (assoc agg k (get m k)) agg)))
+          {} keyvals))
+
+(defn simplify-dollar-map
   "Return (get m :$) if m is a map and :$ is the only key. Otherwise return m.
   Useful for BigQuery JSON serialization where single values may be turned into $ maps"
+  [m]
   (if (and (map? m)
            (= '(:$) (keys m)))
     (:$ m)
     m))
 
-(defn as-vec-if-not [val]
+(defn as-vec-if-not
   "If val is not a sequential collection (maps, sets, strings are not), return it in a vector."
+  [val]
   ; strings are already not sequential, but it feels safer to be explicit
   (if (and (not (string? val))
            (sequential? val))
@@ -98,3 +124,13 @@
       output
       (recur (rest todo)
              (set/union output (into #{} (first todo)))))))
+
+(defn gzip-file-writer
+  "Open FILE-NAME as a writer to a GZIPOutputStream"
+  [file-name]
+  (-> file-name File. FileOutputStream. GZIPOutputStream. io/writer))
+
+(defn gzip-file-reader
+  "Open FILE-NAME as a reader to a GZIPInputStream"
+  [file-name]
+  (-> file-name File. FileInputStream. GZIPInputStream. io/reader))

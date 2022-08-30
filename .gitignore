@@ -11,9 +11,12 @@ pom.xml.asc
 .hgignore
 .hg/
 .idea/
-
+.calva/
+.vscode/
 
 /*.topic
 /*.gz
+/*.zip
 /*.sqlite3
 testdata_*/
+scratch/

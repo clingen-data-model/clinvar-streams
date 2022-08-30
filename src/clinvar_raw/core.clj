@@ -6,29 +6,13 @@
             [taoensso.timbre :as log]
             [clinvar-raw.config :as cfg]
             [clinvar-raw.stream :as stream]
-            [clinvar-raw.service])
-  (:import (java.lang Thread)
-           (java.time Duration))
-  (:gen-class))
+            [clinvar-raw.service]
+            [clinvar-raw.ingest]))
 
-
-(defn -main-unsafe
-  [& args]
-  (.start (Thread. (partial stream/process-drop-messages (cfg/app-config))))
-  (.start (Thread. (partial stream/send-producer-messages
-                            (cfg/app-config)
-                            (cfg/kafka-config (cfg/app-config)))))
-
-  (stream/listen-for-clinvar-drop
-    (cfg/app-config)
-    (cfg/kafka-config (cfg/app-config))))
-
-
-;(defstate watcher- () () )
+(defn start-states! []
+  (mount.core/start #'clinvar-raw.ingest/dedup-db
+                    #'clinvar-raw.service/service))
 
 (defn -main [& args]
-  (mount.core/start #'clinvar-raw.service/service)
-  (let [threads-running? (stream/start)]
-    ;(while (threads-running?)
-    ;  (Thread/sleep (.toMillis (Duration/ofSeconds 1))))
-    ))
+  (start-states!)
+  (stream/start))

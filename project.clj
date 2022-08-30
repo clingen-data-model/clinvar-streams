@@ -15,15 +15,20 @@
                  [mount "0.1.16"]
                  [cli-matic "0.4.3"]
                  [cheshire "5.10.0"]
+                 [mount/mount "0.1.16"]
                  [clj-commons/fs "1.5.2"]
                  [fundingcircle/jackdaw "0.7.4"]
                  [com.google.cloud/google-cloud-storage "1.115.0"]
-                 [com.taoensso/timbre "4.10.0"]
+                 ; timbre and nippy versions here have some conflicts
+                 [com.taoensso/timbre "4.10.0"
+                  :exclusions [com.taoensso/encore]]
+                 [com.taoensso/nippy "3.1.1"]
                  [c3p0/c3p0 "0.9.1.2"]
+                 [digest/digest "1.4.10"]
                  [nrepl "0.8.3"]
                  [org.postgresql/postgresql "42.2.16"]
                  [org.xerial/sqlite-jdbc "3.32.3.2"]]
-  :repl-options {:init-ns clinvar-combiner.core
+  :repl-options {:init-ns clinvar-raw.deduplicator
                  :caught clojure.repl/pst}
   :jvm-opts ["-Xms256m" "-XX:MaxRAMPercentage=50"]
   :main clinvar-streams.core
@@ -34,9 +39,7 @@
   :profiles {;:run-with-repl {:main clinvar-streams.core-repl
              ;            :repl-options {:init-ns clinvar-streams.core-repl}}
              :uberjar {:uberjar-name "clinvar-streams.jar"
-                       :aot :all}
+                       :aot [clinvar-streams.core]}
              :testdata {:main clinvar-raw.generate-local-topic
                         ;:aot [#"clinvar-raw.*"]
-                        :repl-options {:init-ns clinvar-raw.generate-local-topic}}
-             }
-  )
+                        :repl-options {:init-ns clinvar-raw.generate-local-topic}}})

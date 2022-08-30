@@ -23,8 +23,7 @@
   {:kafka-host "pkc-4yyd6.us-east1.gcp.confluent.cloud:9092"
    :kafka-user (util/get-env-required "KAFKA_USER")
    :kafka-password (util/get-env-required "KAFKA_PASSWORD")
-   :kafka-group (util/get-env-required "KAFKA_GROUP")
-   })
+   :kafka-group (util/get-env-required "KAFKA_GROUP")})
 
 
 
@@ -57,8 +56,7 @@
             msgs
             (let [batch (jc/poll consumer (Duration/ofMillis 1000))]
               (recur (concat msgs batch)
-                     (+ c (count batch)))
-              )))))))
+                     (+ c (count batch))))))))))
 ; TODO
 (defn topic-exists? [topic-name]
   "TODO"
@@ -72,7 +70,7 @@
   (let [download-writer (io/writer file-name)
         running (atom true)
         max-offset (get-max-offset topic-name 0)]
-    (with-open [consumer (jc/consumer (config/kafka-config config/app-config))]
+    (with-open [consumer (jc/consumer (config/kafka-config (config/app-config)))]
       ;(jc/subscribe consumer [{:topic-name topic-name}])
       (jc/assign-all consumer [topic-name])
       (jc/seek-to-beginning-eager consumer)
@@ -85,7 +83,7 @@
                 (doseq [msg msgs]
                   (.write download-writer
                           (str (json/generate-string
-                                 (select-keys msg [:key :value :offset :topic-name :partition]))
+                                (select-keys msg [:key :value :offset :topic-name :partition]))
                                "\n"))))))))))
 
 (defn -upload-topic
@@ -94,13 +92,11 @@
     (log/info "Reading file" file-name)
     (with-open [file-rdr (io/reader file-name)
                 ;consumer (jc/consumer (config/kafka-config config/app-config))
-                producer (jc/producer (config/kafka-config config/app-config))]
+                producer (jc/producer (config/kafka-config (config/app-config)))]
       (let [file-lines (line-seq file-rdr)]
         (doseq [line file-lines]
           (let [j (json/parse-string line true)
                 msg (assoc (select-keys j [:key :value :offset :topic-name :partition])
-                      :topic-name topic-name)]
+                           :topic-name topic-name)]
             (log/infof "Producing to %s key=%s value=%s" topic-name (:key msg) (:value msg))
-            (jc/send! producer (jd/map->ProducerRecord (dissoc msg :offset)))
-            )))
-      )))
+            (jc/send! producer (jd/map->ProducerRecord (dissoc msg :offset)))))))))

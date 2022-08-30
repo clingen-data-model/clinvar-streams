@@ -1,8 +1,12 @@
 (ns clinvar-raw.ingest
   "Compare weird JSON-encoded XML messages."
-  (:require [clinvar-raw.debug :as d]
+  (:require [clinvar-streams.storage.rocksdb :as rocksdb]
+            [clinvar-streams.util :refer [select-keys-nested]]
             [clojure.data.json :as json]
-            [clojure.zip       :as zip]))
+            [clojure.zip       :as zip]
+            [mount.core :refer [defstate]]
+            [digest]
+            [taoensso.nippy :as nippy]))
 
 ;; Messages are encoded as JSON which lacks sets.  Data that are
 ;; semantically unordered are encoded as JSON arrays, which forces
@@ -30,7 +34,7 @@
   (try (-> object json/read-str (update "content" parse-json))
        (catch Throwable _ object)))
 
-(defn ^:private disorder
+(defn disorder
   "Return EDN with any vector fields converted to sets."
   [edn]
   (letfn [(branch? [node] (or   (map? node) (vector? node)))
@@ -54,3 +58,57 @@
         was-edn (disorder was)]
     (when-not (= now-edn was-edn)
       (hash now-edn))))
+
+(defstate dedup-db
+  :start (rocksdb/open "clinvar-raw-dedup.db")
+  :stop (rocksdb/close dedup-db))
+
+(defn clinvar-concept-identity [message]
+  (let [entity-type (-> message :content :entity_type)]
+    (case entity-type
+      :trait_mapping (select-keys-nested message [[:content :entity_type]
+                                                  [:content :clinical_assertion_id]
+                                                  [:content :medgen_id]])
+      :gene_association (select-keys-nested message [[:content :entity_type]
+                                                     [:content :gene_id]
+                                                     [:content :variation_id]])
+      (select-keys-nested message [[:content :entity_type]
+                                   [:content :id]]))))
+
+;; (defn clinvar-message-without-meta
+;;   "Drops the fields in the wrapper around :content.
+;;    Ex: :release_date, :event_type "
+;;   [message]
+;;   {:content (:content message)})
+
+(defn store-new!
+  "Takes edn M, stores its hash in the dedup database.
+   Stored as ^Integer (hash m) -> ^String (-> m digest/md5)
+   rocks-put calls nippy/freeze on the value. Could add a put-raw-value."
+  [m]
+  (let [k (clinvar-concept-identity m)
+        v (-> m (dissoc :release_date) disorder)]
+    (rocksdb/rocks-put! dedup-db k v)))
+
+(defn duplicate?
+  "Takes a map M, returns truthy (not nil/false) if has been seen before.
+   Does a full comparison of m, except for :release_date.
+
+   If the content of m has been seen before but the only difference is that the
+   previous was a create and the current is an update, returns :create-to-update.
+   Caller may want to use this to persist the update.
+   TODO change keys to sorted vecs and hash"
+  [current-m #_{:keys [persist-create-update-dup?]
+                :or {persist-create-update-dup? true}}]
+  (let [k (clinvar-concept-identity current-m)
+        current-v (-> current-m (dissoc :release_date) disorder)
+        previous-v (rocksdb/rocks-get dedup-db k)]
+    ;; Compare the messages (without :release_date)
+    ;; If they are different but the only difference is that
+    ;; the previous was a :create and the current is an :update,
+    ;; treat this as a duplicate.
+    (or (= previous-v current-v)
+        (when (and (= :create (:event_type previous-v))
+                   (= :update (:event_type current-v))
+                   (= (:content previous-v) (:content current-v)))
+          :create-to-update))))
