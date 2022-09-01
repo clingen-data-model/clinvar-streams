@@ -2,6 +2,7 @@
   (:require [cheshire.core :as json]
             [clinvar-raw.config :as cfg]
             [clinvar-raw.ingest :as ingest]
+            [clinvar-streams.util :refer [gzip-file-reader]]
             [clojure.java.io :as io]
             [jackdaw.client :as jc]
             [jackdaw.data :as jd]
@@ -56,11 +57,15 @@
   [m ks]
   (update-in m ks #(json/parse-string % true)))
 
+(defn json-unparse-key-in
+  [m ks]
+  (update-in m ks #(json/generate-string %)))
+
 (defn -deduplicate-file
   "Reads event JSON lines from INPUT-FILENAME. Deduplicates and writes
    them to OUTPUT-FILENAME."
   [input-filename output-filename]
-  (with-open [reader (io/reader input-filename)
+  (with-open [reader (gzip-file-reader input-filename)
               writer (io/writer output-filename)]
     (let [input-counter (atom (bigint 0))
           output-counter (atom (bigint 0))
@@ -70,25 +75,25 @@
                      (for [m (-> reader
                                  line-seq
                                  (->> (map #(json/parse-string % true))
-                                      (map #(json-parse-key-in % [:content :content]))))]
-                       (do (swap! input-counter inc)
-                           (let [mdup? (ingest/duplicate? m)]
-                             ;; If its not a duplicate or it is a duplicate but the
-                             ;; return value is :create-to-update, persist the value of m
-                             (when (= :create-to-update mdup?)
-                               (swap! create-to-update-counter inc))
-                             (when (or (not mdup?) (= :create-to-update mdup?))
-                               (ingest/store-new! m))
-                             (if (not mdup?)
-                               (do (swap! output-counter inc)
-                                   m)
-                               ;; A when statement returns nil if not, so maybe don't need this explicit nil return
-                               nil)))))]
+                                      (map #(json-parse-key-in % [:value]))
+                                      (map #(json-parse-key-in % [:value :content :content]))))]
+                       (let [value (:value m)]
+                         (do (swap! input-counter inc)
+                             (let [mdup? (ingest/duplicate? value)]
+                               ;; If its not a duplicate or it is a duplicate but the
+                               ;; return value is :create-to-update, persist the value of m
+                               (when (= :create-to-update mdup?)
+                                 (swap! create-to-update-counter inc))
+                               (ingest/store-new! value)
+                               (if (not mdup?)
+                                 (do (swap! output-counter inc)
+                                     m)
+                                 ;; A when statement returns nil if not, so maybe don't need this explicit nil return
+                                 nil))))))]
 
-        (let [;; Put the nested content back in a string
-              out-m (assoc-in out-m [:content :content]
-                              (json/generate-string (-> out-m :content :content)))]
-          (.write writer (json/generate-string (-> out-m)))
+        (let [;; Put the nested content back in a string, discard the offset/value wrapper
+              out-m (json-unparse-key-in out-m [:content :content])]
+          (.write writer (json/generate-string out-m))
           (.write writer "\n")))
       (log/info {:input-counter @input-counter
                  :output-counter @output-counter
