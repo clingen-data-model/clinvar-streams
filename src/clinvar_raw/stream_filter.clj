@@ -34,7 +34,8 @@
 
 
 (defn topic-download-gzip []
-  (let [app-config (cfg/app-config)
+  (let [app-config (assoc (cfg/app-config)
+                          :kafka-consumer-topic "clinvar-raw-dedup")
         kafka-opts (-> (cfg/kafka-config app-config)
                        (assoc "max.poll.records" "10000"))
         looping? (atom true)
@@ -65,11 +66,12 @@
                     (Thread/sleep (* 1000 60))))
               (do (reset! empty-batch-count 0)
                   (let []
-                    (log/infof "Writing %d filtered records" (count batch))
+                    (log/infof "Writing %d records" (count batch))
                     (dorun (map #(do (.write writer %)
                                      (.write writer "\n"))
                                 (->> batch
-                                     (map #(select-keys % [:offset :value]))
+                                     ;;(map #(select-keys % [:offset :value]))
+                                     (map :value)
                                      (map json/generate-string)))))))))))))
 
 (defn -main [& args]
@@ -79,6 +81,7 @@
         looping? (atom true)
         output-filename (str (:kafka-consumer-topic app-config) "-filtered.txt")
         variation-ids (-> "vcepvars-220801.txt" io/reader line-seq set)
+        entity-types-include-all (set ["trait" "trait_set" "submitter"])
         max-empty-batches 10
         empty-batch-count (atom 0)]
     (with-open [consumer (jc/consumer kafka-opts)]
@@ -107,7 +110,8 @@
                   (let [filtered (->> batch
                                       (map :value)
                                       (map #(json/parse-string % true))
-                                      (filter #(predicate-variation-id-in % variation-ids)))]
+                                      (filter #(or (predicate-entity-type-in % entity-types-include-all)
+                                                   (predicate-variation-id-in % variation-ids))))]
                     (log/infof "Writing %d filtered records" (count filtered))
                     (dorun (map #(do (.write writer %)
                                      (.write writer "\n"))
@@ -117,16 +121,18 @@
 ;; TODO write some functions to abstract reading from a KafkaConsumer
 ;; and reading from a file
 (defn -main-file [& args]
-  (let [input-filename "clinvar-raw.gz"
-        output-filename "clinvar-raw-local-filtered.txt"
+  (let [input-filename "clinvar-raw-original.gz"
+        output-filename "clinvar-raw-local-filtered-vcepvars.txt"
 
         variation-ids (-> "vcepvars-220801.txt" io/reader line-seq set)
-        entity-types-include-all (set [:trait :trait_set])]
+        entity-types-include-all (set ["trait" "trait_set" "submitter"])]
     (with-open [reader (gzip-file-reader input-filename)
                 writer (io/writer output-filename)]
       (doseq [line (-> reader
                        line-seq
                        (->> (map #(json/parse-string % true))
+                            (map :value)
+                            (map #(json/parse-string % true))
                             (filter #(or (predicate-entity-type-in % entity-types-include-all)
                                          (predicate-variation-id-in % variation-ids)))))]
         (do (.write writer (json/generate-string line))

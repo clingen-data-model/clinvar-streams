@@ -168,6 +168,7 @@
                                                     (:type record-type)
                                                     release-date
                                                     (:event-type procedure))))]
+                ;; Output message is {:key ... :value ...}
                 (callback-fn output-message)))))))
 
     ; Output end sentinel
@@ -198,19 +199,26 @@
            (doseq [m msgs]
              (log/infof "Received drop message: %s" m)
              (letfn [(callback-fn [output-m]
-                       (swap! input-counter inc)
-                       ;; Check the message for false positive updates
-                       (let [mdup? (ingest/duplicate? output-m)]
-                             ;; If its not a duplicate or it is a duplicate but the
-                             ;; return value is :create-to-update, persist the value of m
-                         (when (= :create-to-update mdup?)
-                           (swap! create-to-update-counter inc))
-                         ;; Store the most recent always, even if duplicate.
-                         ;; Could be useful for analysis or doing further deep diffs.
-                         (ingest/store-new! output-m)
-                         (when (not mdup?)
-                           (send-update-to-exchange producer output-topic output-m)
-                           (swap! output-counter inc))))]
+                       (log/trace :output-m output-m)
+                       (let [output-value (:value output-m)]
+                         ;; Output message is {:key ... :value ...}
+                         ;; for deduplicating purposes we just care about the value,
+                         ;; since the key contains a timestamp for the release
+                         (swap! input-counter inc)
+                         ;; Check the message for false positive updates
+                         (let [mdup? (ingest/duplicate? output-value)]
+                           ;; If its not a duplicate or it is a duplicate but the
+                           ;; return value is :create-to-update, persist the value of m
+                           (when (= :create-to-update mdup?)
+                             (swap! create-to-update-counter inc))
+                           (when (or (not mdup?) (= :create-to-update mdup?))
+                             (ingest/store-new! output-value))
+                           ;; Storing the most recent always, even if duplicate
+                           ;; could be useful for analysis or doing further deep diffs.
+                           ;;(ingest/store-new! output-value)
+                           (when (not mdup?)
+                             (send-update-to-exchange producer output-topic output-m)
+                             (swap! output-counter inc)))))]
                (process-clinvar-drop (:value m)
                                      callback-fn
                                      (select-keys opts [:storage-protocol]))))))))))
