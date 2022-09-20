@@ -59,9 +59,9 @@
     (when-not (= now-edn was-edn)
       (hash now-edn))))
 
-(defstate dedup-db
-  :start (rocksdb/open "clinvar-raw-dedup.db")
-  :stop (rocksdb/close dedup-db))
+;; (defstate dedup-db
+;;   :start (rocksdb/open "clinvar-raw-dedup.db")
+;;   :stop (rocksdb/close dedup-db))
 
 (defn clinvar-concept-identity [message]
   (let [entity-type (-> message :content :entity_type)]
@@ -85,10 +85,10 @@
   "Takes edn M, stores its hash in the dedup database.
    Stored as ^Integer (hash m) -> ^String (-> m digest/md5)
    rocks-put calls nippy/freeze on the value. Could add a put-raw-value."
-  [m]
+  [db m]
   (let [k (clinvar-concept-identity m)
         v (-> m (dissoc :release_date) disorder)]
-    (rocksdb/rocks-put! dedup-db k v)))
+    (rocksdb/rocks-put! db k v)))
 
 (defn duplicate?
   "Takes a map M, returns truthy (not nil/false) if has been seen before.
@@ -98,11 +98,11 @@
    previous was a create and the current is an update, returns :create-to-update.
    Caller may want to use this to persist the update.
    TODO change keys to sorted vecs and hash"
-  [current-m #_{:keys [persist-create-update-dup?]
-                :or {persist-create-update-dup? true}}]
+  [db current-m #_{:keys [persist-create-update-dup?]
+                   :or {persist-create-update-dup? true}}]
   (let [k (clinvar-concept-identity current-m)
         current-v (-> current-m (dissoc :release_date) disorder)
-        previous-v (rocksdb/rocks-get dedup-db k)]
+        previous-v (rocksdb/rocks-get db k)]
     ;; Compare the messages (without :release_date)
     ;; If they are different but the only difference is that
     ;; the previous was a :create and the current is an :update,

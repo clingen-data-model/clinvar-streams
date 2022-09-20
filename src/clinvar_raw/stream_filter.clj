@@ -37,10 +37,12 @@
   (let [app-config (assoc (cfg/app-config)
                           :kafka-consumer-topic "clinvar-raw-dedup")
         kafka-opts (-> (cfg/kafka-config app-config)
-                       (assoc "max.poll.records" "10000"))
+                       (assoc "max.poll.records" "10000")
+                       ;; 10MiB fetch
+                       (assoc "max.partition.fetch.bytes" (int (* 10 1024 1024))))
         looping? (atom true)
         output-filename (str (:kafka-consumer-topic app-config) ".gz")
-        max-empty-batches 10
+        max-empty-batches 5
         empty-batch-count (atom 0)]
     (with-open [consumer (jc/consumer kafka-opts)]
       (jc/subscribe consumer [{:topic-name (:kafka-consumer-topic app-config)}])
@@ -70,9 +72,9 @@
                     (dorun (map #(do (.write writer %)
                                      (.write writer "\n"))
                                 (->> batch
-                                     ;;(map #(select-keys % [:offset :value]))
+                                     #_(map #(select-keys % [:offset :value]))
                                      (map :value)
-                                     (map json/generate-string)))))))))))))
+                                     #_(map json/generate-string)))))))))))))
 
 (defn -main [& args]
   (let [app-config (cfg/app-config)

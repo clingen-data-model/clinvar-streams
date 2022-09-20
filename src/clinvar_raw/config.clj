@@ -11,10 +11,10 @@
 (defn app-config []
   {:kafka-host (or (System/getenv "KAFKA_BROKER")
                    "pkc-4yyd6.us-east1.gcp.confluent.cloud:9092")
-   :kafka-user (util/get-env-required "KAFKA_USER")
-   :kafka-password (util/get-env-required "KAFKA_PASSWORD")
+   :kafka-user (System/getenv "KAFKA_USER")
+   :kafka-password (System/getenv "KAFKA_PASSWORD")
    :kafka-group (System/getenv "KAFKA_GROUP")
-   :kafka-consumer-topic (util/get-env-required "DX_CV_RAW_INPUT_TOPIC")
+   :kafka-consumer-topic (System/getenv "DX_CV_RAW_INPUT_TOPIC")
    :kafka-producer-topic (System/getenv "DX_CV_RAW_OUTPUT_TOPIC")
    :kafka-reset-consumer-offset (Boolean/valueOf (System/getenv "KAFKA_RESET_CONSUMER_OFFSET"))})
 

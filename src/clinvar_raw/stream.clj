@@ -2,15 +2,21 @@
   (:require [cheshire.core :as json]
             [clinvar-raw.config :as cfg]
             [clinvar-raw.ingest :as ingest]
+            [clinvar-streams.storage.rocksdb :as rocksdb]
+            [clinvar-streams.stream-utils :refer [get-max-offset
+                                                  get-min-offset]]
             [clojure.java.io :as io]
+            [clojure.spec.alpha :as spec]
             [jackdaw.client :as jc]
             [jackdaw.data :as jd]
+            [mount.core :refer [defstate]]
             [taoensso.timbre :as log])
   (:import (com.google.cloud.storage BlobId StorageOptions)
            com.google.cloud.storage.Blob$BlobSourceOption
            java.io.BufferedReader
            java.nio.channels.Channels
-           (java.time Duration)))
+           (java.time Duration)
+           (org.apache.kafka.common TopicPartition)))
 
 (def order-of-processing [{:type "gene"}
                           {:type "variation" :filter {:field :subclass_type :value "SimpleAllele"}}
@@ -93,9 +99,9 @@
                      :rules []
                      :source "clinvar"
                      :reason (str "ClinVar Upstream Release " release-tag),
-                     :notes nil                             ; TODO
+                     :notes nil}}})                             ; TODO
                      ; notes could point to ClinVar release notes (ftp release notes move), or a clingen release notes page
-                     }}})
+
 
 (defn filter-files
   "Filters a collection of file strings containing a path segment which matches `filter-string`"
@@ -107,6 +113,8 @@
   Example: (construct-reader /home foo bar) will return a reader to '/home/foo/bar'
            (construct-reader gs:// bucket dir file) will return a reader to gs://bucket/dir/file"
   [protocol & path-segs]
+  (log/info :fn :construct-reader :msg "Constructing reader"
+            :protocol protocol :path-segs path-segs)
   (cond (= "gs://" protocol) (apply google-storage-line-reader path-segs)
         (= "file://" protocol) (io/reader (apply io/file path-segs))
         :else (io/reader (apply io/file path-segs))))
@@ -130,6 +138,61 @@
             (or (nil? field-key)
                 (= field-value (get val field-key))))
           values))
+
+(defn lazy-line-reader
+  "READER-FN is called to return an open reader.
+   Returns a lazy-seq of lines, and closes the reader when done."
+  [reader-fn]
+  (let [reader (reader-fn)
+        batch-size 1000
+        line-counter (atom (bigint 0))]
+    (letfn [(get-batch [lines]
+              (let [batch (take batch-size lines)]
+                (if (seq batch)
+                  (do (swap! line-counter #(+ % (count batch)))
+                      (lazy-cat batch (get-batch (nthrest lines batch-size))))
+                  (do (log/info :fn :lazy-line-reader
+                                :msg "Closing reader"
+                                :total-lines @line-counter)
+                      (.close reader)))))]
+      (lazy-seq (get-batch (line-seq reader))))))
+
+(defn process-clinvar-drop-refactor
+  "Constructs a lazy sequence of output messages based on an input drop file
+   from the upstream DSP service.
+   Caller should avoid realizing whole sequence into memory."
+  [msg {:keys [storage-protocol]
+        :or {storage-protocol "gs://"}}]
+  ; 1. parse the drop message to determine where the files are
+  ; this will return the folder and bucket and file manifest
+  (log/info {:fn :process-clinvar-drop :msg "Processing drop message" :drop-message msg})
+  (let [parsed-drop-record (if (string? msg) (json/parse-string msg true) msg)
+        release-date (:release_date parsed-drop-record)]
+    (flatten
+     (lazy-cat
+        ; Output start sentinel
+      [(create-sentinel-message release-date :start)]
+      (for [procedure event-procedures]
+        (let [bucket (:bucket parsed-drop-record)
+              files (filter-files (:filter-string procedure) (:files parsed-drop-record))]
+          (log/info {:msg "Processing files for procedure" :bucket bucket :files files})
+          (for [record-type (:order procedure)]
+            (for [file-path (filter-files (:type record-type) files)]
+              (let [reader-fn (partial construct-reader
+                                       storage-protocol
+                                       bucket
+                                       file-path)]
+                (->> (lazy-line-reader reader-fn)
+                     (map #(json/parse-string % true))
+                     (filter-by-field (-> record-type :filter :field)
+                                      (-> record-type :filter :value))
+                     (map #(line-map-to-event %
+                                              (:type record-type)
+                                              release-date
+                                              (:event-type procedure)))))))))
+        ; Output end sentinel
+      [(create-sentinel-message release-date :end)]))))
+
 
 (defn process-clinvar-drop
   "Parses and processes the clinvar drop notification from upstream DSP service.
@@ -174,13 +237,178 @@
     ; Output end sentinel
     (callback-fn (create-sentinel-message release-date :end))))
 
+(comment
+  '(defn- read-end-offsets! [consumer topic-partitions]
+     (let [kafka-end-offsets (.endOffsets consumer topic-partitions)
+           end-offset-map (reduce (fn [acc [k v]]
+                                    (assoc acc [(.topic k) (.partition k)] v))
+                                  {} kafka-end-offsets)]
+       (swap! end-offsets merge end-offset-map))))
 
-(defn start
-  ([]
-   (let [opts (cfg/app-config)
-         kafka-opts (cfg/kafka-config opts)]
-     (start opts kafka-opts)))
-  ([opts kafka-opts]
+
+(defn consumer-lazy-seq-bounded
+  "Consumes a single-partition topic using kafka-config.
+  Consumes messages up to the latest offset at the time the function was initially called.
+  Optionally resets the consumer group to the beginning if reset-to-beginning? is true
+  Closes the consumer when the end-offset is reached."
+  ;; TODO check bounds on end
+  [consumer end-offset]
+  (letfn [(do-poll []
+            (let [msgs (jc/poll consumer (Duration/ofSeconds 10))]
+              (log/info {:fn :consumer-lazy-seq-bounded
+                         :msgs-count (count msgs)
+                         :offsets (map :offset msgs)})
+              (if (some #(= end-offset (:offset %)) msgs)
+                (do (.close consumer)
+                    (filter #(<= (:offset %) end-offset) msgs))
+                (lazy-cat msgs (do-poll)))))]
+    (lazy-seq (do-poll))))
+
+(defn consumer-lazy-seq-infinite
+  "Consumes a single-partition topic using kafka-config.
+  Consumes messages up to the latest offset at the time the function was initially called.
+  Optionally resets the consumer group to the beginning if reset-to-beginning? is true
+  Closes the consumer when the end-offset is reached."
+  ([consumer]
+   (let []
+     (consumer-lazy-seq-bounded consumer ##Inf))))
+
+;; (defn make-anonymous-consumer
+;;   [kafka-config]
+;;   (jc/consumer (dissoc kafka-config
+;;                        "group.id")))
+
+;; (defn seek-to-beginning-anonymous-consumer
+;;   [consumer])
+
+
+(defn make-consumer
+  "Add an anonymous override which uses assign and no group"
+  [topic-name kafka-config from-beginning?]
+  (let [consumer (jc/consumer kafka-config)]
+    (jc/subscribe consumer [{:topic-name topic-name}])
+    (when from-beginning?
+      (jc/seek-to-beginning-eager consumer))
+    #_(jc/assign-all consumer [topic-name])
+    #_(stream-utils/assign-all consumer topic-name)
+    #_(if from-beginning?
+        (stream-utils/seek-to-beginning consumer))))
+
+(defn consumer-lazy-seq-full-topic
+  "Consumes a single-partition topic using kafka-config, but discards any group.id in order
+   to consumer in anonymous mode (no consumer group).
+   Consumes messages up to the latest offset at the time the function was initially called.
+   Optionally resets the consumer group to the beginning if reset-to-beginning? is true"
+  ([topic-name kafka-config]
+   (let [min-offset (get-min-offset topic-name 0)
+         ;; get-max-offset is actually the "next" offset.
+         ;; Consider changing get-max-offset to subtract 1
+         max-offset (dec (get-max-offset topic-name 0))
+         consumer (jc/consumer (-> kafka-config
+                                   (dissoc "group.id")))]
+     (jc/assign-all consumer [topic-name])
+     (jc/seek consumer (TopicPartition. topic-name 0) min-offset)
+     (log/debug :min-offset min-offset :max-offset max-offset)
+     (consumer-lazy-seq-bounded consumer
+                                max-offset))))
+
+(declare dedup-db)
+(defstate dedup-db
+  :start (rocksdb/open "clinvar-raw-dedup.db")
+  :stop (rocksdb/close dedup-db))
+
+(defn reset-db []
+  (mount.core/stop #'dedup-db)
+  (rocksdb/destroy! "clinvar-raw-dedup.db")
+  (mount.core/start #'dedup-db))
+
+(defn dedup-clinvar-raw-seq
+  "Takes a kafka message seq [{:key ... :value ...} ...] and deduplicate it."
+  [db messages]
+  (letfn [(check [msg]
+            (let [output-value (:value msg)
+                  is-dup? (ingest/duplicate? db output-value)]
+              (when (or (not is-dup?) (= :create-to-update is-dup?))
+                (ingest/store-new! db output-value))
+              (not is-dup?)))]
+    (filter check messages)))
+
+
+(defn start [opts kafka-opts]
+  (let [output-topic (:kafka-producer-topic opts)
+        input-counter (atom (bigint 0))
+        output-counter (atom (bigint 0))
+        create-to-update-counter (atom (bigint 0))
+        max-input-count 2
+        input-count (atom 0)]
+    (with-open [producer (jc/producer kafka-opts)
+                consumer (jc/consumer kafka-opts)]
+      (jc/subscribe consumer [{:topic-name (:kafka-consumer-topic opts)}])
+      (when (:kafka-reset-consumer-offset opts)
+        (log/info "Resetting to start of input topic")
+        (jc/seek-to-beginning-eager consumer))
+      (log/info "Subscribed to consumer topic " (:kafka-consumer-topic opts))
+      (loop [msgs (-> consumer
+                      (consumer-lazy-seq-infinite)
+                      (->> (take 2)))]
+        (when @listening-for-drop
+          (if-let [m (first msgs)] ; realizes first message
+            (let [m-value (json/parse-string (:value m) true)]
+              (doseq [filtered-message (dedup-clinvar-raw-seq
+                                        dedup-db
+                                        (process-clinvar-drop-refactor
+                                         m-value
+                                         (select-keys opts [:storage-protocol])))]
+                (send-update-to-exchange producer output-topic filtered-message))
+              (recur (rest msgs)))
+            (log/error "Unexpectedly reached end of infintie lazy seq"))))
+      #_(while @listening-for-drop
+          (let [msgs (jc/poll consumer (Duration/ofSeconds 5))]
+            (when (seq msgs)
+              (log/info "Received poll batch of size: " (count msgs)))
+            (doseq [m msgs]
+              (log/infof "Received drop message: %s" m)
+              (doseq [filtered-message (dedup-clinvar-raw-seq
+                                        dedup-db
+                                        (process-clinvar-drop-refactor
+                                         (:value m)
+                                         (select-keys opts [:storage-protocol])))]
+                (send-update-to-exchange producer output-topic filtered-message))))))))
+
+(defn repl-test []
+  (reset-db)
+  (let [opts (-> (cfg/app-config)
+                 (assoc :kafka-consumer-topic "broad-dsp-clinvar")
+                 (assoc :kafka-producer-topic "clinvar-raw-dedup")
+                 (assoc :kafka-reset-consumer-offset true))
+        kafka-config (-> (cfg/kafka-config opts)
+                         (assoc  "group.id" "kyle-dev"))]
+    (start opts kafka-config)))
+
+(comment
+  (mount.core/start #'dedup-db)
+  (rocksdb/destroy! "")
+
+  (reset-db)
+  (let [opts (-> (cfg/app-config)
+                 (assoc :kafka-consumer-topic "broad-dsp-clinvar")
+                 (assoc :kafka-producer-topic "clinvar-raw-dedup")
+                 (assoc :kafka-reset-consumer-offset true))
+        kafka-config (-> (cfg/kafka-config opts)
+                         (assoc  "group.id" "kyle-dev"))]
+    (start opts kafka-config))
+
+
+  (let [opts (-> (cfg/app-config)
+                 (assoc :kafka-consumer-topic "variation-556853")
+                 (assoc :kafka-reset-consumer-offset true))
+        kafka-config (-> (cfg/kafka-config opts)
+                         (assoc  "group.id" "kyle-dev"))
+        consumer (jc/consumer kafka-config)]
+    (jc/subscribe consumer [{:topic-name (:kafka-consumer-topic opts)}])
+    (jc/seek-to-beginning-eager consumer)))
+
+'(defn start [opts kafka-opts]
    (let [output-topic (:kafka-producer-topic opts)
          input-counter (atom (bigint 0))
          output-counter (atom (bigint 0))
@@ -199,20 +427,20 @@
            (doseq [m msgs]
              (log/infof "Received drop message: %s" m)
              (letfn [(callback-fn [output-m]
-                       (log/trace :output-m output-m)
+                       (log/info :output-m output-m)
                        (let [output-value (:value output-m)]
                          ;; Output message is {:key ... :value ...}
                          ;; for deduplicating purposes we just care about the value,
                          ;; since the key contains a timestamp for the release
                          (swap! input-counter inc)
                          ;; Check the message for false positive updates
-                         (let [mdup? (ingest/duplicate? output-value)]
+                         (let [mdup? (ingest/duplicate? dedup-db output-value)]
                            ;; If its not a duplicate or it is a duplicate but the
                            ;; return value is :create-to-update, persist the value of m
                            (when (= :create-to-update mdup?)
                              (swap! create-to-update-counter inc))
                            (when (or (not mdup?) (= :create-to-update mdup?))
-                             (ingest/store-new! output-value))
+                             (ingest/store-new! dedup-db output-value))
                            ;; Storing the most recent always, even if duplicate
                            ;; could be useful for analysis or doing further deep diffs.
                            ;;(ingest/store-new! output-value)
@@ -221,4 +449,10 @@
                              (swap! output-counter inc)))))]
                (process-clinvar-drop (:value m)
                                      callback-fn
-                                     (select-keys opts [:storage-protocol]))))))))))
+                                     (select-keys opts [:storage-protocol])))))))))
+
+
+(defn start-with-env []
+  (let [opts (cfg/app-config)
+        kafka-opts (cfg/kafka-config opts)]
+    (start opts kafka-opts)))
