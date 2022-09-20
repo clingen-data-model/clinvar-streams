@@ -6,7 +6,6 @@
             [clinvar-streams.stream-utils :refer [get-max-offset
                                                   get-min-offset]]
             [clojure.java.io :as io]
-            [clojure.spec.alpha :as spec]
             [jackdaw.client :as jc]
             [jackdaw.data :as jd]
             [mount.core :refer [defstate]]
@@ -157,6 +156,58 @@
                       (.close reader)))))]
       (lazy-seq (get-batch (line-seq reader))))))
 
+(defn flatten-one-level [things]
+  (for [coll things e coll] e))
+
+(defn unchunk [s]
+  (lazy-cat [(first s)] (unchunk (rest s))))
+
+(defn concatenated-lazy-line-seq
+  [storage-protocol & path-seg-groups]
+  (when (seq path-seg-groups)
+    (lazy-cat
+     (let [path-segs (first path-seg-groups)
+           reader-fn (partial apply
+                              (partial construct-reader
+                                       storage-protocol)
+                              path-segs)]
+       (->> (lazy-line-reader reader-fn)))
+     (concatenated-lazy-line-seq storage-protocol (rest path-seg-groups)))))
+
+(defn generate-messages-from-diff
+  "Takes a diff notification message, and returns a lazy seq of
+   all the output messages in order for this diffed release."
+  [parsed-diff-files-msg storage-protocol]
+  (let [release-date (:release_date parsed-diff-files-msg)]
+    (letfn [(process-file [{:keys [bucket path order-entry event-type]}]
+              (let [reader-fn (partial construct-reader
+                                       storage-protocol
+                                       bucket
+                                       path)]
+                (->> (lazy-line-reader reader-fn)
+                     (map #(json/parse-string % true))
+                     (filter-by-field (-> order-entry :filter :field)
+                                      (-> order-entry :filter :value))
+                     (map #(line-map-to-event %
+                                              (:type order-entry)
+                                              release-date
+                                              event-type)))))
+            (process-files [files-to-process]
+              (when (seq files-to-process)
+                (lazy-cat (process-file (first files-to-process))
+                          (process-files (rest files-to-process)))))]
+      (->> (for [procedure event-procedures]
+             (let [bucket (:bucket parsed-diff-files-msg)
+                   files (filter-files (:filter-string procedure) (:files parsed-diff-files-msg))]
+               (for [order-entry (:order procedure)
+                     file-path (filter-files (:type order-entry) files)]
+                 {:bucket bucket
+                  :path file-path
+                  :order-entry order-entry
+                  :event-type (:event-type procedure)})))
+           flatten-one-level
+           process-files))))
+
 (defn process-clinvar-drop-refactor
   "Constructs a lazy sequence of output messages based on an input drop file
    from the upstream DSP service.
@@ -165,77 +216,57 @@
         :or {storage-protocol "gs://"}}]
   ; 1. parse the drop message to determine where the files are
   ; this will return the folder and bucket and file manifest
-  (log/info {:fn :process-clinvar-drop :msg "Processing drop message" :drop-message msg})
+  (log/info {:fn :process-clinvar-drop-refactor :msg "Processing drop message" :drop-message msg})
   (let [parsed-drop-record (if (string? msg) (json/parse-string msg true) msg)
         release-date (:release_date parsed-drop-record)]
-    (flatten
-     (lazy-cat
-        ; Output start sentinel
-      [(create-sentinel-message release-date :start)]
-      (for [procedure event-procedures]
-        (let [bucket (:bucket parsed-drop-record)
-              files (filter-files (:filter-string procedure) (:files parsed-drop-record))]
-          (log/info {:msg "Processing files for procedure" :bucket bucket :files files})
-          (for [record-type (:order procedure)]
-            (for [file-path (filter-files (:type record-type) files)]
-              (let [reader-fn (partial construct-reader
-                                       storage-protocol
-                                       bucket
-                                       file-path)]
-                (->> (lazy-line-reader reader-fn)
-                     (map #(json/parse-string % true))
-                     (filter-by-field (-> record-type :filter :field)
-                                      (-> record-type :filter :value))
-                     (map #(line-map-to-event %
-                                              (:type record-type)
-                                              release-date
-                                              (:event-type procedure)))))))))
-        ; Output end sentinel
-      [(create-sentinel-message release-date :end)]))))
+    (lazy-cat
+     [(create-sentinel-message release-date :start)]
+     (generate-messages-from-diff parsed-drop-record storage-protocol)
+     (create-sentinel-message release-date :end))))
 
 
-(defn process-clinvar-drop
-  "Parses and processes the clinvar drop notification from upstream DSP service.
+#_(defn process-clinvar-drop
+    "Parses and processes the clinvar drop notification from upstream DSP service.
    Calls callback-fn on each resulting output message."
-  [msg callback-fn {:keys [storage-protocol]
-                    :or {storage-protocol "gs://"}}]
+    [msg callback-fn {:keys [storage-protocol]
+                      :or {storage-protocol "gs://"}}]
   ; 1. parse the drop message to determine where the files are
   ; this will return the folder and bucket and file manifest
-  (log/info {:fn :process-clinvar-drop :msg "Processing drop message" :drop-message msg})
-  (let [parsed-drop-record (if (string? msg) (json/parse-string msg true) msg)
-        release-date (:release_date parsed-drop-record)]
+    (log/info {:fn :process-clinvar-drop :msg "Processing drop message" :drop-message msg})
+    (let [parsed-drop-record (if (string? msg) (json/parse-string msg true) msg)
+          release-date (:release_date parsed-drop-record)]
     ; Output start sentinel
-    (callback-fn (create-sentinel-message release-date :start))
+      (callback-fn (create-sentinel-message release-date :start))
 
     ;; TODO verify all entries in manifest are processed else warning and logging on unknown files.
     ;; 2. process the folder structure in order of tables for create-update and then reverse for deletes
     ;; An event procedure per: add, update, delete
     ;; Don't care about return, just want to execute it all
-    (doseq [procedure event-procedures]
-      (log/info {:msg "Starting to process procedure" :procedure procedure})
-      (let [bucket (:bucket parsed-drop-record)
-            files (filter-files (:filter-string procedure) (:files parsed-drop-record))]
-        (log/info {:msg "Processing files for procedure" :bucket bucket :files files})
-        (doseq [record-type (:order procedure)]
-          (doseq [file-path (filter-files (:type record-type) files)]
-            (log/info "Opening file: " (str bucket "/" file-path))
-            (with-open [file-reader (construct-reader storage-protocol
-                                                      bucket
-                                                      file-path)]
-              (log/info "Iterating over file: " (str bucket "/" file-path))
-              (doseq [output-message
-                      (->> (read-newline-json {:reader file-reader})
-                           (filter-by-field (-> record-type :filter :field)
-                                            (-> record-type :filter :value))
-                           (map #(line-map-to-event %
-                                                    (:type record-type)
-                                                    release-date
-                                                    (:event-type procedure))))]
+      (doseq [procedure event-procedures]
+        (log/info {:msg "Starting to process procedure" :procedure procedure})
+        (let [bucket (:bucket parsed-drop-record)
+              files (filter-files (:filter-string procedure) (:files parsed-drop-record))]
+          (log/info {:msg "Processing files for procedure" :bucket bucket :files files})
+          (doseq [record-type (:order procedure)]
+            (doseq [file-path (filter-files (:type record-type) files)]
+              (log/info "Opening file: " (str bucket "/" file-path))
+              (with-open [file-reader (construct-reader storage-protocol
+                                                        bucket
+                                                        file-path)]
+                (log/info "Iterating over file: " (str bucket "/" file-path))
+                (doseq [output-message
+                        (->> (read-newline-json {:reader file-reader})
+                             (filter-by-field (-> record-type :filter :field)
+                                              (-> record-type :filter :value))
+                             (map #(line-map-to-event %
+                                                      (:type record-type)
+                                                      release-date
+                                                      (:event-type procedure))))]
                 ;; Output message is {:key ... :value ...}
-                (callback-fn output-message)))))))
+                  (callback-fn output-message)))))))
 
     ; Output end sentinel
-    (callback-fn (create-sentinel-message release-date :end))))
+      (callback-fn (create-sentinel-message release-date :end))))
 
 (comment
   '(defn- read-end-offsets! [consumer topic-partitions]
@@ -270,29 +301,7 @@
   Optionally resets the consumer group to the beginning if reset-to-beginning? is true
   Closes the consumer when the end-offset is reached."
   ([consumer]
-   (let []
-     (consumer-lazy-seq-bounded consumer ##Inf))))
-
-;; (defn make-anonymous-consumer
-;;   [kafka-config]
-;;   (jc/consumer (dissoc kafka-config
-;;                        "group.id")))
-
-;; (defn seek-to-beginning-anonymous-consumer
-;;   [consumer])
-
-
-(defn make-consumer
-  "Add an anonymous override which uses assign and no group"
-  [topic-name kafka-config from-beginning?]
-  (let [consumer (jc/consumer kafka-config)]
-    (jc/subscribe consumer [{:topic-name topic-name}])
-    (when from-beginning?
-      (jc/seek-to-beginning-eager consumer))
-    #_(jc/assign-all consumer [topic-name])
-    #_(stream-utils/assign-all consumer topic-name)
-    #_(if from-beginning?
-        (stream-utils/seek-to-beginning consumer))))
+   (consumer-lazy-seq-bounded consumer ##Inf)))
 
 (defn consumer-lazy-seq-full-topic
   "Consumes a single-partition topic using kafka-config, but discards any group.id in order
