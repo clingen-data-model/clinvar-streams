@@ -336,11 +336,7 @@
 
 (defn start [opts kafka-opts]
   (let [output-topic (:kafka-producer-topic opts)
-        input-counter (atom (bigint 0))
-        output-counter (atom (bigint 0))
-        create-to-update-counter (atom (bigint 0))
-        max-input-count 2
-        input-count (atom 0)]
+        max-input-count 2]
     (with-open [producer (jc/producer kafka-opts)
                 consumer (jc/consumer kafka-opts)]
       (jc/subscribe consumer [{:topic-name (:kafka-consumer-topic opts)}])
@@ -348,19 +344,18 @@
         (log/info "Resetting to start of input topic")
         (jc/seek-to-beginning-eager consumer))
       (log/info "Subscribed to consumer topic " (:kafka-consumer-topic opts))
-      (loop [msgs (-> consumer
+      (doseq [msg (-> consumer
                       (consumer-lazy-seq-infinite)
-                      (->> (take 2)))]
+                      (->> (take max-input-count)))]
         (when @listening-for-drop
-          (if-let [m (first msgs)] ; realizes first message
+          (if-let [m msg] ; realizes first message
             (let [m-value (json/parse-string (:value m) true)]
               (doseq [filtered-message (dedup-clinvar-raw-seq
                                         dedup-db
                                         (process-clinvar-drop-refactor
                                          m-value
                                          (select-keys opts [:storage-protocol])))]
-                (send-update-to-exchange producer output-topic filtered-message))
-              (recur (rest msgs)))
+                (send-update-to-exchange producer output-topic filtered-message)))
             (log/error "Unexpectedly reached end of infintie lazy seq"))))
       #_(while @listening-for-drop
           (let [msgs (jc/poll consumer (Duration/ofSeconds 5))]
