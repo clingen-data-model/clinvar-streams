@@ -224,59 +224,6 @@
      (generate-messages-from-diff parsed-drop-record storage-protocol)
      (create-sentinel-message release-date :end))))
 
-
-#_(defn process-clinvar-drop
-    "Parses and processes the clinvar drop notification from upstream DSP service.
-   Calls callback-fn on each resulting output message."
-    [msg callback-fn {:keys [storage-protocol]
-                      :or {storage-protocol "gs://"}}]
-  ; 1. parse the drop message to determine where the files are
-  ; this will return the folder and bucket and file manifest
-    (log/info {:fn :process-clinvar-drop :msg "Processing drop message" :drop-message msg})
-    (let [parsed-drop-record (if (string? msg) (json/parse-string msg true) msg)
-          release-date (:release_date parsed-drop-record)]
-    ; Output start sentinel
-      (callback-fn (create-sentinel-message release-date :start))
-
-    ;; TODO verify all entries in manifest are processed else warning and logging on unknown files.
-    ;; 2. process the folder structure in order of tables for create-update and then reverse for deletes
-    ;; An event procedure per: add, update, delete
-    ;; Don't care about return, just want to execute it all
-      (doseq [procedure event-procedures]
-        (log/info {:msg "Starting to process procedure" :procedure procedure})
-        (let [bucket (:bucket parsed-drop-record)
-              files (filter-files (:filter-string procedure) (:files parsed-drop-record))]
-          (log/info {:msg "Processing files for procedure" :bucket bucket :files files})
-          (doseq [record-type (:order procedure)]
-            (doseq [file-path (filter-files (:type record-type) files)]
-              (log/info "Opening file: " (str bucket "/" file-path))
-              (with-open [file-reader (construct-reader storage-protocol
-                                                        bucket
-                                                        file-path)]
-                (log/info "Iterating over file: " (str bucket "/" file-path))
-                (doseq [output-message
-                        (->> (read-newline-json {:reader file-reader})
-                             (filter-by-field (-> record-type :filter :field)
-                                              (-> record-type :filter :value))
-                             (map #(line-map-to-event %
-                                                      (:type record-type)
-                                                      release-date
-                                                      (:event-type procedure))))]
-                ;; Output message is {:key ... :value ...}
-                  (callback-fn output-message)))))))
-
-    ; Output end sentinel
-      (callback-fn (create-sentinel-message release-date :end))))
-
-(comment
-  '(defn- read-end-offsets! [consumer topic-partitions]
-     (let [kafka-end-offsets (.endOffsets consumer topic-partitions)
-           end-offset-map (reduce (fn [acc [k v]]
-                                    (assoc acc [(.topic k) (.partition k)] v))
-                                  {} kafka-end-offsets)]
-       (swap! end-offsets merge end-offset-map))))
-
-
 (defn consumer-lazy-seq-bounded
   "Consumes a single-partition topic using kafka-config.
   Consumes messages up to the latest offset at the time the function was initially called.
@@ -365,19 +312,7 @@
                                          m-value
                                          (select-keys opts [:storage-protocol])))]
                 (send-update-to-exchange producer output-topic filtered-message)))
-            (log/error "Unexpectedly reached end of infintie lazy seq"))))
-      #_(while @listening-for-drop
-          (let [msgs (jc/poll consumer (Duration/ofSeconds 5))]
-            (when (seq msgs)
-              (log/info "Received poll batch of size: " (count msgs)))
-            (doseq [m msgs]
-              (log/infof "Received drop message: %s" m)
-              (doseq [filtered-message (dedup-clinvar-raw-seq
-                                        dedup-db
-                                        (process-clinvar-drop-refactor
-                                         (:value m)
-                                         (select-keys opts [:storage-protocol])))]
-                (send-update-to-exchange producer output-topic filtered-message))))))))
+            (log/error "Unexpectedly reached end of infinite lazy seq")))))))
 
 (defn repl-test []
   (reset-db)

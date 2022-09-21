@@ -146,7 +146,7 @@ Usage from REPL:
       (letfn [(process-local-drop-message
                 [message]
                 (log/info {:fn :process-local-drop-message :message message})
-                (let [output-messages (stream/process-clinvar-drop
+                (let [output-messages (stream/process-clinvar-drop-refactor
                                        message
                                        {:storage-protocol "file://"})]
                   ;; Realize whole lazy seq into memory

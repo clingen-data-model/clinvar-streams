@@ -10,9 +10,9 @@
             [clinvar-raw.ingest]))
 
 (defn start-states! []
-  (mount.core/start #'clinvar-raw.ingest/dedup-db
+  (mount.core/start #'clinvar-raw.stream/dedup-db
                     #'clinvar-raw.service/service))
 
 (defn -main [& args]
   (start-states!)
-  (stream/start))
+  (stream/start-with-env))
