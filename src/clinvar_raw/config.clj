@@ -4,7 +4,11 @@
 
 (timbre/set-level! :info)
 (timbre/swap-config!
- #(update % :appenders merge {:file (timbre/spit-appender {:fname "logs/clinvar-streams.log"})}))
+ #(update % :appenders merge {:file (timbre/spit-appender
+                                     {:fname (let [log-path "logs/clinvar-streams.log"]
+                                               (if (not-empty (System/getenv "CLINVAR_STREAMS_DATA_DIR"))
+                                                 (str (System/getenv "CLINVAR_STREAMS_DATA_DIR") "/" log-path)
+                                                 log-path))})}))
 
 
 (defn remove-nil-values [m]
@@ -18,7 +22,8 @@
    :kafka-group (System/getenv "KAFKA_GROUP")
    :kafka-consumer-topic (System/getenv "DX_CV_RAW_INPUT_TOPIC")
    :kafka-producer-topic (System/getenv "DX_CV_RAW_OUTPUT_TOPIC")
-   :kafka-reset-consumer-offset (Boolean/valueOf (System/getenv "KAFKA_RESET_CONSUMER_OFFSET"))})
+   :kafka-reset-consumer-offset (Boolean/valueOf (System/getenv "KAFKA_RESET_CONSUMER_OFFSET"))
+   :data-directory (System/getenv "CLINVAR_STREAMS_DATA_DIR")})
 
 (defn kafka-config
   "Expects :kafka-user, :kafka-password, :kafka-host, :kafka-group in opts."
