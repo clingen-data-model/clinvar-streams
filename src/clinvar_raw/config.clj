@@ -1,9 +1,11 @@
 (ns clinvar-raw.config
-  (:require [clinvar-streams.util :as util]
-            [taoensso.timbre :as timbre])
+  (:require [taoensso.timbre :as timbre])
   (:import java.lang.System))
 
 (timbre/set-level! :info)
+(timbre/swap-config!
+ #(update % :appenders merge {:file (timbre/spit-appender {:fname "logs/clinvar-streams.log"})}))
+
 
 (defn remove-nil-values [m]
   (into {} (filter #(not= nil (second %)) m)))
