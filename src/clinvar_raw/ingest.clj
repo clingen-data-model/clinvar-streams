@@ -4,9 +4,8 @@
             [clinvar-streams.util :refer [select-keys-nested]]
             [clojure.data.json :as json]
             [clojure.zip       :as zip]
-            [mount.core :refer [defstate]]
             [digest]
-            [taoensso.nippy :as nippy]))
+            [taoensso.timbre :as log]))
 
 ;; Messages are encoded as JSON which lacks sets.  Data that are
 ;; semantically unordered are encoded as JSON arrays, which forces
@@ -88,6 +87,7 @@
   [db m]
   (let [k (clinvar-concept-identity m)
         v (-> m (dissoc :release_date) disorder)]
+    (log/debug :fn :store-new! :k k)
     (rocksdb/rocks-put! db k v)))
 
 (defn duplicate?
@@ -103,12 +103,14 @@
   (let [k (clinvar-concept-identity current-m)
         current-v (-> current-m (dissoc :release_date) disorder)
         previous-v (rocksdb/rocks-get db k)]
+    (log/debug :fn :duplicate? :k k :current current-v :previous previous-v)
     ;; Compare the messages (without :release_date)
     ;; If they are different but the only difference is that
     ;; the previous was a :create and the current is an :update,
     ;; treat this as a duplicate.
     (or (= previous-v current-v)
-        (when (and (= :create (:event_type previous-v))
-                   (= :update (:event_type current-v))
-                   (= (:content previous-v) (:content current-v)))
-          :create-to-update))))
+        (if (and (= :create (:event_type previous-v))
+                 (= :update (:event_type current-v))
+                 (= (:content previous-v) (:content current-v)))
+          :create-to-update ;; truthy
+          false))))
