@@ -1,5 +1,5 @@
 (ns clinvar-streams.util
-  (:require [clojure.string :as s]
+  (:require [cheshire.core :as json]
             [clojure.core.async :as async]
             [clojure.java.io :as io]
             [clojure.set :as set])
@@ -134,3 +134,24 @@
   "Open FILE-NAME as a reader to a GZIPInputStream"
   [file-name]
   (-> file-name File. FileInputStream. GZIPInputStream. io/reader))
+
+(defn parse-json-if-not-parsed [val]
+  (if (string? val)
+    (json/parse-string val)
+    val))
+
+(defn parse-nested-content [val]
+  (if (get-in val [:content :content])
+    (let [nested-content (-> val :content :content parse-json-if-not-parsed)]
+      (assoc-in val
+                [:content :content]
+                nested-content))
+    val))
+
+(defn unparse-nested-content [val]
+  (let [content (-> val :content :content)]
+    (if (string? content)
+      val
+      (assoc-in val
+                [:content :content]
+                (json/generate-string content)))))

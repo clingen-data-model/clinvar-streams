@@ -1,8 +1,7 @@
 (ns clinvar-streams.config
   (:require [taoensso.timbre :as timbre]
             [jackdaw.serdes :as j-serde])
-  (:import java.lang.System)
-  (:gen-class))
+  (:import java.lang.System))
 
 
 (def topic-metadata

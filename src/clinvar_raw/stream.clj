@@ -5,7 +5,10 @@
             [clinvar-streams.storage.rocksdb :as rocksdb]
             [clinvar-streams.stream-utils :refer [get-max-offset
                                                   get-min-offset]]
+            [clinvar-streams.util :refer [parse-nested-content
+                                          unparse-nested-content]]
             [clojure.java.io :as io]
+            [clojure.stacktrace :refer [print-stack-trace]]
             [jackdaw.client :as jc]
             [jackdaw.data :as jd]
             [mount.core :refer [defstate]]
@@ -222,7 +225,7 @@
     (lazy-cat
      [(create-sentinel-message release-date :start)]
      (generate-messages-from-diff parsed-drop-record storage-protocol)
-     (create-sentinel-message release-date :end))))
+     [(create-sentinel-message release-date :end)])))
 
 (defn consumer-lazy-seq-bounded
   "Consumes a single-partition topic using kafka-config.
@@ -233,9 +236,10 @@
   [consumer end-offset]
   (letfn [(do-poll []
             (let [msgs (jc/poll consumer (Duration/ofSeconds 10))]
-              (log/info {:fn :consumer-lazy-seq-bounded
-                         :msgs-count (count msgs)
-                         :offsets (map :offset msgs)})
+              (when (seq msgs)
+                (log/info {:fn :consumer-lazy-seq-bounded
+                           :msgs-count (count msgs)
+                           :offsets (map :offset msgs)}))
               (if (some #(= end-offset (:offset %)) msgs)
                 (do (.close consumer)
                     (filter #(<= (:offset %) end-offset) msgs))
@@ -281,14 +285,17 @@
 (defn dedup-clinvar-raw-seq
   "Takes a kafka message seq [{:key ... :value ...} ...] and deduplicate it."
   [db messages]
-  (letfn [(check [msg]
+  (letfn [(not-a-dup [msg]
             (let [output-value (:value msg)
                   is-dup? (ingest/duplicate? db output-value)]
               (when (or (not is-dup?) (= :create-to-update is-dup?))
                 (ingest/store-new! db output-value))
+              (log/debug {:is-dup? is-dup?})
               (not is-dup?)))]
-    (filter check messages)))
+    (filter not-a-dup messages)))
 
+(defn count-seq [s counter-atom]
+  (for [e s] (do (swap! counter-atom inc) e)))
 
 (defn start [opts kafka-opts]
   (let [output-topic (:kafka-producer-topic opts)
@@ -302,16 +309,28 @@
       (log/info "Subscribed to consumer topic " (:kafka-consumer-topic opts))
       (doseq [msg (-> consumer
                       (consumer-lazy-seq-infinite)
-                      (->> (take max-input-count)))]
+                      #_(nthrest 2) ;; TODO remove skipping first
+                      #_(->> (take max-input-count)))]
         (when @listening-for-drop
           (if-let [m msg] ; realizes first message
-            (let [m-value (json/parse-string (:value m) true)]
+            (let [m-value (-> m :value
+                              (json/parse-string true)
+                              parse-nested-content)]
               (doseq [filtered-message (dedup-clinvar-raw-seq
                                         dedup-db
                                         (process-clinvar-drop-refactor
                                          m-value
                                          (select-keys opts [:storage-protocol])))]
-                (send-update-to-exchange producer output-topic filtered-message)))
+                (assert (map? filtered-message) {:msg "Expected map" :filtered-message filtered-message})
+                (try
+                  (let [output-message (assoc filtered-message :value
+                                              (unparse-nested-content
+                                               (:value filtered-message)))]
+                    (send-update-to-exchange producer output-topic output-message))
+                  (catch Exception e
+                    (print-stack-trace e)
+                    (log/error {:msg "Error outputting message" :filtered-message filtered-message})
+                    (throw e)))))
             (log/error "Unexpectedly reached end of infinite lazy seq")))))))
 
 (defn repl-test []
@@ -325,19 +344,6 @@
     (start opts kafka-config)))
 
 (comment
-  (mount.core/start #'dedup-db)
-  (rocksdb/destroy! "")
-
-  (reset-db)
-  (let [opts (-> (cfg/app-config)
-                 (assoc :kafka-consumer-topic "broad-dsp-clinvar")
-                 (assoc :kafka-producer-topic "clinvar-raw-dedup")
-                 (assoc :kafka-reset-consumer-offset true))
-        kafka-config (-> (cfg/kafka-config opts)
-                         (assoc  "group.id" "kyle-dev"))]
-    (start opts kafka-config))
-
-
   (let [opts (-> (cfg/app-config)
                  (assoc :kafka-consumer-topic "variation-556853")
                  (assoc :kafka-reset-consumer-offset true))
@@ -347,48 +353,20 @@
     (jc/subscribe consumer [{:topic-name (:kafka-consumer-topic opts)}])
     (jc/seek-to-beginning-eager consumer)))
 
-'(defn start [opts kafka-opts]
-   (let [output-topic (:kafka-producer-topic opts)
-         input-counter (atom (bigint 0))
-         output-counter (atom (bigint 0))
-         create-to-update-counter (atom (bigint 0))]
-     (with-open [producer (jc/producer kafka-opts)
-                 consumer (jc/consumer kafka-opts)]
-       (jc/subscribe consumer [{:topic-name (:kafka-consumer-topic opts)}])
-       (when (:kafka-reset-consumer-offset opts)
-         (log/info "Resetting to start of input topic")
-         (jc/seek-to-beginning-eager consumer))
-       (log/info "Subscribed to consumer topic " (:kafka-consumer-topic opts))
-       (while @listening-for-drop
-         (let [msgs (jc/poll consumer (Duration/ofSeconds 5))]
-           (when (not (empty? msgs))
-             (log/info "Received poll batch of size: " (count msgs)))
-           (doseq [m msgs]
-             (log/infof "Received drop message: %s" m)
-             (letfn [(callback-fn [output-m]
-                       (log/info :output-m output-m)
-                       (let [output-value (:value output-m)]
-                         ;; Output message is {:key ... :value ...}
-                         ;; for deduplicating purposes we just care about the value,
-                         ;; since the key contains a timestamp for the release
-                         (swap! input-counter inc)
-                         ;; Check the message for false positive updates
-                         (let [mdup? (ingest/duplicate? dedup-db output-value)]
-                           ;; If its not a duplicate or it is a duplicate but the
-                           ;; return value is :create-to-update, persist the value of m
-                           (when (= :create-to-update mdup?)
-                             (swap! create-to-update-counter inc))
-                           (when (or (not mdup?) (= :create-to-update mdup?))
-                             (ingest/store-new! dedup-db output-value))
-                           ;; Storing the most recent always, even if duplicate
-                           ;; could be useful for analysis or doing further deep diffs.
-                           ;;(ingest/store-new! output-value)
-                           (when (not mdup?)
-                             (send-update-to-exchange producer output-topic output-m)
-                             (swap! output-counter inc)))))]
-               (process-clinvar-drop (:value m)
-                                     callback-fn
-                                     (select-keys opts [:storage-protocol])))))))))
+
+(comment
+  (reset-db)
+  (let [messages (-> "events-variation-133137.txt"
+                     io/reader
+                     line-seq
+                     (->> (map #(json/parse-string % true))
+                          (map parse-nested-content)
+                          (map (fn [m] {:value m}))))]
+    (log/info :message-count (count messages))
+    (let [deduped (into [] (dedup-clinvar-raw-seq dedup-db messages))]
+      (log/info {:deduped-count (count deduped)})
+      (log/info (str {:messages (into [] messages)}))
+      (log/info (str {:deduped (into [] deduped)})))))
 
 
 (defn start-with-env []
