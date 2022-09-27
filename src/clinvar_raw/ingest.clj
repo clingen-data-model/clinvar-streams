@@ -4,6 +4,7 @@
             [clinvar-streams.util :refer [select-keys-nested]]
             [clojure.data.json :as json]
             [clojure.zip       :as zip]
+            [clojure.walk :refer [postwalk]]
             [digest]
             [taoensso.timbre :as log]))
 
@@ -48,6 +49,29 @@
                       (let [[k v] node]
                         (if (vector? v) (zip/replace loc [k (set v)]) loc))
                       loc))))))))
+
+(defn disorder-pw
+  "Return EDN with any vector fields converted to sets."
+  [edn]
+  (letfn [(entry? [node] (isa? (type node) clojure.lang.MapEntry))
+          (f [node]
+            (if (and (vector? node) (not (entry? node)))
+              (set node)
+              node))]
+    (postwalk f edn)))
+
+(defn disorder-recur
+  [edn]
+  (persistent!
+   (cond
+     (vector? edn) (set (mapv disorder-recur (transient edn)))
+    ;;(map? edn) (into {} (map (fn [[k v]] [k (disorder v)]) edn))
+
+     (map? edn) (apply (partial assoc edn)
+                       (apply concat (for [[k v] edn] [k (disorder v)])))
+     #_(for [[k v] edn] (assoc edn k (disorder v)))
+
+     :else edn)))
 
 (defn differ?
   "Nil when NOW equals WAS after DISORDERing their vectors into sets.

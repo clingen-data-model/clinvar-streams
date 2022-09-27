@@ -20,25 +20,25 @@
            (java.time Duration)
            (org.apache.kafka.common TopicPartition)))
 
-(def order-of-processing [{:type "gene"}
+(def order-of-processing [#_{:type "gene"}
                           {:type "variation" :filter {:field :subclass_type :value "SimpleAllele"}}
                           {:type "variation" :filter {:field :subclass_type :value "Haplotype"}}
                           {:type "variation" :filter {:field :subclass_type :value "Genotype"}}
-                          {:type "gene_association"}
-                          {:type "trait"}
-                          {:type "trait_set"}
-                          {:type "submitter"}
-                          {:type "submission"}
-                          {:type "clinical_assertion_trait"}
-                          {:type "clinical_assertion_trait_set"}
-                          {:type "clinical_assertion_observation"}
-                          {:type "clinical_assertion"}
-                          {:type "clinical_assertion_variation" :filter {:field :subclass_type :value "SimpleAllele"}}
-                          {:type "clinical_assertion_variation" :filter {:field :subclass_type :value "Haplotype"}}
-                          {:type "clinical_assertion_variation" :filter {:field :subclass_type :value "Genotype"}}
-                          {:type "trait_mapping"}
-                          {:type "rcv_accession"}
-                          {:type "variation_archive"}])
+                          #_{:type "gene_association"}
+                          #_{:type "trait"}
+                          #_{:type "trait_set"}
+                          #_{:type "submitter"}
+                          #_{:type "submission"}
+                          #_{:type "clinical_assertion_trait"}
+                          #_{:type "clinical_assertion_trait_set"}
+                          #_{:type "clinical_assertion_observation"}
+                          #_{:type "clinical_assertion"}
+                          #_{:type "clinical_assertion_variation" :filter {:field :subclass_type :value "SimpleAllele"}}
+                          #_{:type "clinical_assertion_variation" :filter {:field :subclass_type :value "Haplotype"}}
+                          #_{:type "clinical_assertion_variation" :filter {:field :subclass_type :value "Genotype"}}
+                          #_{:type "trait_mapping"}
+                          #_{:type "rcv_accession"}
+                          #_{:type "variation_archive"}])
 
 (def delete-order-of-processing (reverse order-of-processing))
 
@@ -146,7 +146,7 @@
    Returns a lazy-seq of lines, and closes the reader when done."
   [reader-fn]
   (let [reader (reader-fn)
-        batch-size 1000
+        batch-size 100
         line-counter (atom (bigint 0))]
     (letfn [(get-batch [lines]
               (let [batch (take batch-size lines)]
@@ -162,20 +162,20 @@
 (defn flatten-one-level [things]
   (for [coll things e coll] e))
 
-(defn unchunk [s]
-  (lazy-cat [(first s)] (unchunk (rest s))))
+#_(defn unchunk [s]
+    (lazy-cat [(first s)] (unchunk (rest s))))
 
-(defn concatenated-lazy-line-seq
-  [storage-protocol & path-seg-groups]
-  (when (seq path-seg-groups)
-    (lazy-cat
-     (let [path-segs (first path-seg-groups)
-           reader-fn (partial apply
-                              (partial construct-reader
-                                       storage-protocol)
-                              path-segs)]
-       (->> (lazy-line-reader reader-fn)))
-     (concatenated-lazy-line-seq storage-protocol (rest path-seg-groups)))))
+#_(defn concatenated-lazy-line-seq
+    [storage-protocol & path-seg-groups]
+    (when (seq path-seg-groups)
+      (lazy-cat
+       (let [path-segs (first path-seg-groups)
+             reader-fn (partial apply
+                                (partial construct-reader
+                                         storage-protocol)
+                                path-segs)]
+         (->> (lazy-line-reader reader-fn)))
+       (concatenated-lazy-line-seq storage-protocol (rest path-seg-groups)))))
 
 (defn generate-messages-from-diff
   "Takes a diff notification message, and returns a lazy seq of
@@ -279,27 +279,51 @@
 
 (defn reset-db []
   (mount.core/stop #'dedup-db)
-  (rocksdb/destroy! "clinvar-raw-dedup.db")
+  (rocksdb/rocks-destroy! "clinvar-raw-dedup.db")
   (mount.core/start #'dedup-db))
 
 (defn dedup-clinvar-raw-seq
-  "Takes a kafka message seq [{:key ... :value ...} ...] and deduplicate it."
-  [db messages]
+  "Takes a kafka message seq [{:key ... :value ...} ...] and deduplicate it.
+   Optionally takes a map of atoms to count inputs and outputs for monitoring purposes."
+  [db messages & [{input-counter :input-counter
+                   output-counter :output-counter
+                   :or {input-counter (atom 0)
+                        output-counter (atom 0)}}]]
   (letfn [(not-a-dup [msg]
+            (log/debug :fn :not-a-dup :msg msg)
             (let [output-value (:value msg)
                   is-dup? (ingest/duplicate? db output-value)]
+              (swap! input-counter inc)
               (when (or (not is-dup?) (= :create-to-update is-dup?))
                 (ingest/store-new! db output-value))
               (log/debug {:is-dup? is-dup?})
+              (when (not is-dup?)
+                (swap! output-counter inc))
               (not is-dup?)))]
-    (filter not-a-dup messages)))
+    (filter not-a-dup messages)
+    #_(->> messages
+           (partition-by #(vector (-> % :value :release_date)
+                                  (-> % :value :content :entity_type)))
+           (map (fn [batch]
+                  (->> batch
+                       (pmap (fn [msg]
+                               [(not-a-dup msg) msg]))
+                       (filter #(= true (first %)))
+                       (map second))))
+           (flatten-one-level))))
 
-(defn count-seq [s counter-atom]
-  (for [e s] (do (swap! counter-atom inc) e)))
+(defn json-parse-key-in
+  "Replaces key K in map M with the json parsed value of K in M"
+  [m ks]
+  (update-in m ks #(json/parse-string % true)))
+
+(defn json-unparse-key-in
+  [m ks]
+  (update-in m ks #(json/generate-string %)))
 
 (defn start [opts kafka-opts]
   (let [output-topic (:kafka-producer-topic opts)
-        max-input-count 2]
+        max-input-count Long/MAX_VALUE]
     (with-open [producer (jc/producer kafka-opts)
                 consumer (jc/consumer kafka-opts)]
       (jc/subscribe consumer [{:topic-name (:kafka-consumer-topic opts)}])
@@ -307,31 +331,33 @@
         (log/info "Resetting to start of input topic")
         (jc/seek-to-beginning-eager consumer))
       (log/info "Subscribed to consumer topic " (:kafka-consumer-topic opts))
-      (doseq [msg (-> consumer
-                      (consumer-lazy-seq-infinite)
-                      #_(nthrest 2) ;; TODO remove skipping first
-                      #_(->> (take max-input-count)))]
-        (when @listening-for-drop
-          (if-let [m msg] ; realizes first message
-            (let [m-value (-> m :value
-                              (json/parse-string true)
-                              parse-nested-content)]
-              (doseq [filtered-message (dedup-clinvar-raw-seq
-                                        dedup-db
-                                        (process-clinvar-drop-refactor
-                                         m-value
-                                         (select-keys opts [:storage-protocol])))]
-                (assert (map? filtered-message) {:msg "Expected map" :filtered-message filtered-message})
-                (try
-                  (let [output-message (assoc filtered-message :value
-                                              (unparse-nested-content
-                                               (:value filtered-message)))]
-                    (send-update-to-exchange producer output-topic output-message))
-                  (catch Exception e
-                    (print-stack-trace e)
-                    (log/error {:msg "Error outputting message" :filtered-message filtered-message})
-                    (throw e)))))
-            (log/error "Unexpectedly reached end of infinite lazy seq")))))))
+      (doseq [m (-> consumer
+                    (consumer-lazy-seq-infinite)
+                    (->> (take max-input-count)))
+              :while @listening-for-drop]
+        (let [m-value (-> m :value
+                          (json/parse-string true))
+              input-counter (atom 0)
+              output-counter (atom 0)]
+          (doseq [filtered-message (->> (process-clinvar-drop-refactor m-value
+                                                                       (select-keys opts [:storage-protocol]))
+                                        ;; process-clinvar-drop-refactor returns {:key ... :value ...}
+                                        (map #(json-parse-key-in % [:value :content :content]))
+                                        ((fn [msgs]
+                                           (dedup-clinvar-raw-seq dedup-db
+                                                                  msgs
+                                                                  {:input-counter input-counter
+                                                                   :output-counter output-counter}))))]
+            (assert (map? filtered-message) {:msg "Expected map" :filtered-message filtered-message})
+            (let [output-message (json-unparse-key-in filtered-message
+                                                      [:value :content :content])]
+              (send-update-to-exchange producer output-topic output-message)))
+          (log/info {:msg "Deduplication counts for release"
+                     :release-date (:release_date m-value)
+                     :input-counter (int @input-counter)
+                     :output-counter (int @output-counter)
+                     :reduction-ratio (double (/ (- @input-counter @output-counter)
+                                                 @input-counter))}))))))
 
 (defn repl-test []
   (reset-db)
@@ -342,17 +368,6 @@
         kafka-config (-> (cfg/kafka-config opts)
                          (assoc  "group.id" "kyle-dev"))]
     (start opts kafka-config)))
-
-(comment
-  (let [opts (-> (cfg/app-config)
-                 (assoc :kafka-consumer-topic "variation-556853")
-                 (assoc :kafka-reset-consumer-offset true))
-        kafka-config (-> (cfg/kafka-config opts)
-                         (assoc  "group.id" "kyle-dev"))
-        consumer (jc/consumer kafka-config)]
-    (jc/subscribe consumer [{:topic-name (:kafka-consumer-topic opts)}])
-    (jc/seek-to-beginning-eager consumer)))
-
 
 (comment
   (reset-db)

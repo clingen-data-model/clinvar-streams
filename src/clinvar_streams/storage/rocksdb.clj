@@ -24,15 +24,6 @@
     (io/make-parents full-path)
     (RocksDB/open opts full-path)))
 
-(defn destroy! [db-name]
-  ;; https://gist.github.com/olieidel/c551a911a4798312e4ef42a584677397
-  (letfn [(rm-r [some-path]
-            (let [some-file (io/file some-path)]
-              (when (.isDirectory some-file)
-                (run! rm-r (.listFiles some-file)))
-              (io/delete-file some-file)))]
-    (let [full-path (create-db-path db-name)]
-      (when (-> full-path io/file .exists) (rm-r full-path)))))
 
 (defn- key-digest [k]
   (-> k freeze digest/md5 .getBytes))
