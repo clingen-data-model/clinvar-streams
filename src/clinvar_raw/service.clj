@@ -35,6 +35,7 @@
 (defn start []
   (http/start (create-server)))
 
+(declare service)
 (defstate service
   :start (http/start (create-server))
   :stop (http/stop service))

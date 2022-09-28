@@ -5,10 +5,9 @@
             [clinvar-streams.storage.rocksdb :as rocksdb]
             [clinvar-streams.stream-utils :refer [get-max-offset
                                                   get-min-offset]]
-            [clinvar-streams.util :refer [parse-nested-content
-                                          unparse-nested-content]]
+            [clinvar-streams.util :refer [parse-nested-content]]
+            [clojure.core.async :as async]
             [clojure.java.io :as io]
-            [clojure.stacktrace :refer [print-stack-trace]]
             [jackdaw.client :as jc]
             [jackdaw.data :as jd]
             [mount.core :refer [defstate]]
@@ -20,25 +19,25 @@
            (java.time Duration)
            (org.apache.kafka.common TopicPartition)))
 
-(def order-of-processing [#_{:type "gene"}
+(def order-of-processing [{:type "gene"}
                           {:type "variation" :filter {:field :subclass_type :value "SimpleAllele"}}
                           {:type "variation" :filter {:field :subclass_type :value "Haplotype"}}
                           {:type "variation" :filter {:field :subclass_type :value "Genotype"}}
-                          #_{:type "gene_association"}
-                          #_{:type "trait"}
-                          #_{:type "trait_set"}
-                          #_{:type "submitter"}
-                          #_{:type "submission"}
-                          #_{:type "clinical_assertion_trait"}
-                          #_{:type "clinical_assertion_trait_set"}
-                          #_{:type "clinical_assertion_observation"}
-                          #_{:type "clinical_assertion"}
-                          #_{:type "clinical_assertion_variation" :filter {:field :subclass_type :value "SimpleAllele"}}
-                          #_{:type "clinical_assertion_variation" :filter {:field :subclass_type :value "Haplotype"}}
-                          #_{:type "clinical_assertion_variation" :filter {:field :subclass_type :value "Genotype"}}
-                          #_{:type "trait_mapping"}
-                          #_{:type "rcv_accession"}
-                          #_{:type "variation_archive"}])
+                          {:type "gene_association"}
+                          {:type "trait"}
+                          {:type "trait_set"}
+                          {:type "submitter"}
+                          {:type "submission"}
+                          {:type "clinical_assertion_trait"}
+                          {:type "clinical_assertion_trait_set"}
+                          {:type "clinical_assertion_observation"}
+                          {:type "clinical_assertion"}
+                          {:type "clinical_assertion_variation" :filter {:field :subclass_type :value "SimpleAllele"}}
+                          {:type "clinical_assertion_variation" :filter {:field :subclass_type :value "Haplotype"}}
+                          {:type "clinical_assertion_variation" :filter {:field :subclass_type :value "Genotype"}}
+                          {:type "trait_mapping"}
+                          {:type "rcv_accession"}
+                          {:type "variation_archive"}])
 
 (def delete-order-of-processing (reverse order-of-processing))
 
@@ -140,6 +139,32 @@
             (or (nil? field-key)
                 (= field-value (get val field-key))))
           values))
+
+(defn lazy-line-reader-threaded
+  "READER-FN is called to return an open reader.
+   Returns a lazy-seq of lines, and closes the reader when done.
+   Internally uses a reader thread that will greedily try to keep an async/chan
+   full so that any I/O is done ahead of the time the line is needed by the application"
+  [reader-fn]
+  (let [reader (reader-fn)
+        ;;batch-size 100
+        line-counter (atom (bigint 0))
+        line-chan (async/chan 500)]
+    (letfn [(enqueuer []
+              (doseq [line (line-seq reader)]
+                (swap! line-counter #(+ % 1))
+                (async/>!! line-chan line))
+              (do (log/info :fn :lazy-line-reader
+                            :msg "Closing reader"
+                            :total-lines @line-counter)
+                  (.close reader)))
+            (dequeuer []
+              (for [i (range)
+                    :let [line (async/<!! line-chan)]
+                    :while line]
+                line))]
+      (lazy-seq (do (.start (Thread. enqueuer))
+                    (dequeuer))))))
 
 (defn lazy-line-reader
   "READER-FN is called to return an open reader.
@@ -354,10 +379,10 @@
               (send-update-to-exchange producer output-topic output-message)))
           (log/info {:msg "Deduplication counts for release"
                      :release-date (:release_date m-value)
-                     :input-counter (int @input-counter)
-                     :output-counter (int @output-counter)
-                     :reduction-ratio (double (/ (- @input-counter @output-counter)
-                                                 @input-counter))}))))))
+                     :in-count (int @input-counter)
+                     :out-count (int @output-counter)
+                     :removed-ratio (double (/ (- @input-counter @output-counter)
+                                               @input-counter))}))))))
 
 (defn repl-test []
   (reset-db)

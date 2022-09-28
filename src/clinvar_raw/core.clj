@@ -1,10 +1,6 @@
 (ns clinvar-raw.core
-  (:require [jackdaw.client.log :as jl]
-            [clojure.pprint :as pprint]
-            [cheshire.core :as json]
-            [mount.core :refer [defstate]]
-            [taoensso.timbre :as log]
-            [clinvar-raw.config :as cfg]
+  (:require [clojure.pprint :as pprint]
+            [mount.core]
             [clinvar-raw.stream :as stream]
             [clinvar-raw.service]
             [clinvar-raw.ingest]))
