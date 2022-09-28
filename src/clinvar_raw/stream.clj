@@ -147,9 +147,9 @@
    full so that any I/O is done ahead of the time the line is needed by the application"
   [reader-fn]
   (let [reader (reader-fn)
-        ;;batch-size 100
+        buffer-size 500
         line-counter (atom (bigint 0))
-        line-chan (async/chan 500)]
+        line-chan (async/chan buffer-size)]
     (letfn [(enqueuer []
               (doseq [line (line-seq reader)]
                 (swap! line-counter #(+ % 1))
@@ -157,7 +157,8 @@
               (do (log/info :fn :lazy-line-reader
                             :msg "Closing reader"
                             :total-lines @line-counter)
-                  (.close reader)))
+                  (.close reader)
+                  (async/close! line-chan)))
             (dequeuer []
               (for [i (range)
                     :let [line (async/<!! line-chan)]
@@ -212,7 +213,7 @@
                                        storage-protocol
                                        bucket
                                        path)]
-                (->> (lazy-line-reader reader-fn)
+                (->> (lazy-line-reader-threaded reader-fn)
                      (map #(json/parse-string % true))
                      (filter-by-field (-> order-entry :filter :field)
                                       (-> order-entry :filter :value))
