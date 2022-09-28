@@ -66,7 +66,15 @@
   (let [blob-id (BlobId/of bucket filename)
         blob (.get gc-storage blob-id)]
     (log/debugf "Obtaining reader to blob %s/%s" bucket filename)
-    (-> blob (.reader (make-array Blob$BlobSourceOption 0)) (Channels/newReader "UTF-8") BufferedReader.)))
+    (-> blob
+        (.reader
+         (make-array Blob$BlobSourceOption 0)
+         ;; Some intermittent exceptions on reading the object when run locally
+         ;; the method of automatically determining the credentials and project
+         ;; to use may be different on the cluster vs locally
+         #_(into-array [(Blob$BlobSourceOption/userProject "....")]))
+        (Channels/newReader "UTF-8")
+        BufferedReader.)))
 
 (defn line-map-to-event
   "Parses a single line of a drop file, transforms into an event object map
@@ -203,6 +211,32 @@
          (->> (lazy-line-reader reader-fn)))
        (concatenated-lazy-line-seq storage-protocol (rest path-seg-groups)))))
 
+(defn dedup-clinvar-raw-seq
+  "Takes a kafka message seq [{:key ... :value ...} ...] and deduplicate it.
+   Optionally takes a map of atoms to count inputs and outputs for monitoring purposes."
+  [db messages & [{parallelize? :parallelize?
+                   input-counter :input-counter
+                   output-counter :output-counter
+                   :or {input-counter (atom 0)
+                        output-counter (atom 0)}}]]
+  (letfn [(not-a-dup [msg]
+            (log/debug :fn :not-a-dup :msg msg)
+            (let [output-value (:value msg)
+                  is-dup? (ingest/duplicate? db output-value)]
+              (swap! input-counter inc)
+              (when (or (not is-dup?) (= :create-to-update is-dup?))
+                (ingest/store-new! db output-value))
+              (log/debug {:is-dup? is-dup?})
+              (when (not is-dup?)
+                (swap! output-counter inc))
+              (not is-dup?)))]
+    (if parallelize?
+      (->> messages
+           (pmap (fn [msg] [(not-a-dup msg) msg]))
+           (filter #(= true (first %)))
+           (map second))
+      (filter not-a-dup messages))))
+
 (defn generate-messages-from-diff
   "Takes a diff notification message, and returns a lazy seq of
    all the output messages in order for this diffed release."
@@ -308,36 +342,6 @@
   (rocksdb/rocks-destroy! "clinvar-raw-dedup.db")
   (mount.core/start #'dedup-db))
 
-(defn dedup-clinvar-raw-seq
-  "Takes a kafka message seq [{:key ... :value ...} ...] and deduplicate it.
-   Optionally takes a map of atoms to count inputs and outputs for monitoring purposes."
-  [db messages & [{input-counter :input-counter
-                   output-counter :output-counter
-                   :or {input-counter (atom 0)
-                        output-counter (atom 0)}}]]
-  (letfn [(not-a-dup [msg]
-            (log/debug :fn :not-a-dup :msg msg)
-            (let [output-value (:value msg)
-                  is-dup? (ingest/duplicate? db output-value)]
-              (swap! input-counter inc)
-              (when (or (not is-dup?) (= :create-to-update is-dup?))
-                (ingest/store-new! db output-value))
-              (log/debug {:is-dup? is-dup?})
-              (when (not is-dup?)
-                (swap! output-counter inc))
-              (not is-dup?)))]
-    (filter not-a-dup messages)
-    #_(->> messages
-           (partition-by #(vector (-> % :value :release_date)
-                                  (-> % :value :content :entity_type)))
-           (map (fn [batch]
-                  (->> batch
-                       (pmap (fn [msg]
-                               [(not-a-dup msg) msg]))
-                       (filter #(= true (first %)))
-                       (map second))))
-           (flatten-one-level))))
-
 (defn json-parse-key-in
   "Replaces key K in map M with the json parsed value of K in M"
   [m ks]
@@ -349,7 +353,7 @@
 
 (defn start [opts kafka-opts]
   (let [output-topic (:kafka-producer-topic opts)
-        max-input-count Long/MAX_VALUE]
+        max-input-count 1]
     (with-open [producer (jc/producer kafka-opts)
                 consumer (jc/consumer kafka-opts)]
       (jc/subscribe consumer [{:topic-name (:kafka-consumer-topic opts)}])
@@ -370,10 +374,15 @@
                                         ;; process-clinvar-drop-refactor returns {:key ... :value ...}
                                         (map #(json-parse-key-in % [:value :content :content]))
                                         ((fn [msgs]
-                                           (dedup-clinvar-raw-seq dedup-db
-                                                                  msgs
-                                                                  {:input-counter input-counter
-                                                                   :output-counter output-counter}))))]
+                                           (log/info :msgs (type msgs))
+                                           (->> msgs
+                                                (partition-by #(-> % :value :content :entity_type))
+                                                ;; TODO do some counting on a per-type basis
+                                                (map #(dedup-clinvar-raw-seq dedup-db %
+                                                                             {:parallelize? true
+                                                                              :input-counter input-counter
+                                                                              :output-counter output-counter}))
+                                                flatten-one-level))))]
             (assert (map? filtered-message) {:msg "Expected map" :filtered-message filtered-message})
             (let [output-message (json-unparse-key-in filtered-message
                                                       [:value :content :content])]
@@ -382,8 +391,9 @@
                      :release-date (:release_date m-value)
                      :in-count (int @input-counter)
                      :out-count (int @output-counter)
-                     :removed-ratio (double (/ (- @input-counter @output-counter)
-                                               @input-counter))}))))))
+                     :removed-ratio (when (< 0 @input-counter)
+                                      (double (/ (- @input-counter @output-counter)
+                                                 @input-counter)))}))))))
 
 (defn repl-test []
   (reset-db)
