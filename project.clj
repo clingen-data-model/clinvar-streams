@@ -29,7 +29,8 @@
                  [org.postgresql/postgresql "42.2.16"]
                  [org.xerial/sqlite-jdbc "3.32.3.2"]]
   :repl-options {:init-ns clinvar-raw.stream
-                 :caught clojure.repl/pst}
+                 :caught clojure.repl/pst
+                 :jvm-opts ["-Xms256m" "-XX:MaxRAMPercentage=25"]}
   :jvm-opts ["-Xms256m" "-XX:MaxRAMPercentage=50"]
   :main clinvar-streams.core
   :aot [clinvar-streams.core]
