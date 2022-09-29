@@ -87,16 +87,18 @@
 ;;   :stop (rocksdb/close dedup-db))
 
 (defn clinvar-concept-identity [message]
-  (let [entity-type (-> message :content :entity_type)]
-    (case entity-type
-      :trait_mapping (select-keys-nested message [[:content :entity_type]
-                                                  [:content :clinical_assertion_id]
-                                                  [:content :medgen_id]])
-      :gene_association (select-keys-nested message [[:content :entity_type]
-                                                     [:content :gene_id]
-                                                     [:content :variation_id]])
-      (select-keys-nested message [[:content :entity_type]
-                                   [:content :id]]))))
+  (let [entity-type (-> message :content :entity_type)
+        id (case entity-type
+             :trait_mapping (select-keys-nested message [[:content :entity_type]
+                                                         [:content :clinical_assertion_id]
+                                                         [:content :medgen_id]])
+             :gene_association (select-keys-nested message [[:content :entity_type]
+                                                            [:content :gene_id]
+                                                            [:content :variation_id]])
+             (select-keys-nested message [[:content :entity_type]
+                                          [:content :id]]))]
+    (when (empty? id) (log/error :fn :duplicate? :msg "Key was empty" :id id :message message))
+    id))
 
 ;; (defn clinvar-message-without-meta
 ;;   "Drops the fields in the wrapper around :content.
