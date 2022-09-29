@@ -20,6 +20,7 @@ FROM openjdk:11
 LABEL maintainer="Kyle Ferriter <kferrite@broadinstitute.org>"
 
 RUN apt-get update && apt-get install sqlite3
+RUN apt-get install -y --no-install-recommends htop bmon clojure
 COPY --from=builder /app/target/uberjar/clinvar-streams.jar /app/clinvar-streams.jar
 EXPOSE 8080
-ENTRYPOINT ["java", "-jar", "-XX:MaxRAMPercentage=50", "/app/clinvar-streams.jar"]
+ENTRYPOINT ["java", "-jar", "/app/clinvar-streams.jar"]

@@ -31,7 +31,7 @@
   :repl-options {:init-ns clinvar-raw.stream
                  :caught clojure.repl/pst
                  :jvm-opts ["-Xms256m" "-XX:MaxRAMPercentage=25"]}
-  :jvm-opts ["-Xms256m" "-XX:MaxRAMPercentage=50"]
+  :jvm-opts ["-Xms256m"]
   :main clinvar-streams.core
   :aot [clinvar-streams.core]
   :resource-paths ["resources"]
