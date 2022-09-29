@@ -152,17 +152,23 @@
   "READER-FN is called to return an open reader.
    Returns a lazy-seq of lines, and closes the reader when done.
    Internally uses a reader thread that will greedily try to keep an async/chan
-   full so that any I/O is done ahead of the time the line is needed by the application"
+   full so that any I/O is done ahead of the time the line is needed by the application.
+   This will speed up applications where the I/O operation is sufficiently expensive and the
+   time spent processing each line is high enough that the reader thread can stay ahead of the
+   line processing by the application. For example a (count) on the return from this will be
+   slower than the non-threaded version of this function.
+   But a loop doing some work for each will be faster because each call to get the next item
+   will never have to wait for I/O."
   [reader-fn]
   (let [reader (reader-fn)
-        buffer-size 500
+        buffer-size 100
         line-counter (atom (bigint 0))
         line-chan (async/chan buffer-size)]
     (letfn [(enqueuer []
               (doseq [line (line-seq reader)]
                 (swap! line-counter #(+ % 1))
                 (async/>!! line-chan line))
-              (do (log/info :fn :lazy-line-reader
+              (do (log/info :fn :lazy-line-reader-threaded
                             :msg "Closing reader"
                             :total-lines @line-counter)
                   (.close reader)
@@ -173,14 +179,17 @@
                     :while line]
                 line))]
       (lazy-seq (do (.start (Thread. enqueuer))
-                    (dequeuer))))))
+                    (for [i (range)
+                          :let [line (async/<!! line-chan)]
+                          :while line]
+                      line))))))
 
 (defn lazy-line-reader
   "READER-FN is called to return an open reader.
    Returns a lazy-seq of lines, and closes the reader when done."
   [reader-fn]
   (let [reader (reader-fn)
-        batch-size 100
+        batch-size 10
         line-counter (atom (bigint 0))]
     (letfn [(get-batch [lines]
               (let [batch (take batch-size lines)]
@@ -230,12 +239,15 @@
               (when (not is-dup?)
                 (swap! output-counter inc))
               (not is-dup?)))]
-    (if parallelize?
-      (->> messages
-           (pmap (fn [msg] [(not-a-dup msg) msg]))
-           (filter #(= true (first %)))
-           (map second))
-      (filter not-a-dup messages))))
+    (filter not-a-dup messages)
+    #_(if parallelize?
+        (->> messages
+             (partition-all 100)
+             (map #(pmap (fn [msg] [(not-a-dup msg) msg]) %))
+             (flatten-one-level)
+             (filter #(= true (first %)))
+             (map second))
+        (filter not-a-dup messages))))
 
 (defn generate-messages-from-diff
   "Takes a diff notification message, and returns a lazy seq of
@@ -247,7 +259,7 @@
                                        storage-protocol
                                        bucket
                                        path)]
-                (->> (lazy-line-reader-threaded reader-fn)
+                (->> (lazy-line-reader reader-fn)
                      (map #(json/parse-string % true))
                      (filter-by-field (-> order-entry :filter :field)
                                       (-> order-entry :filter :value))
@@ -373,16 +385,33 @@
                                                                        (select-keys opts [:storage-protocol]))
                                         ;; process-clinvar-drop-refactor returns {:key ... :value ...}
                                         (map #(json-parse-key-in % [:value :content :content]))
-                                        ((fn [msgs]
-                                           (log/info :msgs (type msgs))
-                                           (->> msgs
-                                                (partition-by #(-> % :value :content :entity_type))
+
+                                        (#(dedup-clinvar-raw-seq dedup-db %
+                                                                 {:parallelize? false
+                                                                  :input-counter input-counter
+                                                                  :output-counter output-counter}))
+
+                                        ;; Seems to be retaining head
+                                        ;; parallelized section.
+                                        ;; The problem may be down to chunking. partition-by return
+                                        ;; might get chunked and the next map tries to realize multiple
+                                        ;; partitions into memory at the same time.
+                                        #_(partition-by #(-> % :value :content :entity_type))
+                                        #_(map #(dedup-clinvar-raw-seq dedup-db %
+                                                                       {:parallelize? false
+                                                                        :input-counter input-counter
+                                                                        :output-counter output-counter}))
+                                        #_flatten-one-level
+                                        ;; TODO this nested threading seems to be retaining the head pointer
+                                        #_((fn [msgs]
+                                             (->> msgs
+                                                  (partition-by #(-> % :value :content :entity_type))
                                                 ;; TODO do some counting on a per-type basis
-                                                (map #(dedup-clinvar-raw-seq dedup-db %
-                                                                             {:parallelize? true
-                                                                              :input-counter input-counter
-                                                                              :output-counter output-counter}))
-                                                flatten-one-level))))]
+                                                  (map #(dedup-clinvar-raw-seq dedup-db %
+                                                                               {:parallelize? true
+                                                                                :input-counter input-counter
+                                                                                :output-counter output-counter}))
+                                                  flatten-one-level))))]
             (assert (map? filtered-message) {:msg "Expected map" :filtered-message filtered-message})
             (let [output-message (json-unparse-key-in filtered-message
                                                       [:value :content :content])]
