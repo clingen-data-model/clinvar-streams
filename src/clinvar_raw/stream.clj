@@ -6,11 +6,10 @@
             [jackdaw.client :as jc]
             [jackdaw.data :as jd]
             [taoensso.timbre :as log])
-  (:import (com.google.cloud.storage BlobId StorageOptions)
-           com.google.cloud.storage.Blob$BlobSourceOption
-           java.io.BufferedReader
-           java.nio.channels.Channels
-           (java.time Duration)))
+  (:import [com.google.cloud.storage Blob$BlobSourceOption BlobId StorageOptions]
+           [java.io BufferedReader]
+           [java.nio.channels Channels]
+           [java.time Duration]))
 
 (def order-of-processing [{:type "gene"}
                           {:type "variation" :filter {:field :subclass_type :value "SimpleAllele"}}
