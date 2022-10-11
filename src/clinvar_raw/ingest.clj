@@ -91,7 +91,9 @@
         id (case entity-type
              :trait_mapping (select-keys-nested message [[:content :entity_type]
                                                          [:content :clinical_assertion_id]
-                                                         [:content :medgen_id]])
+                                                         [:content :mapping_value]
+                                                         [:content :mapping_type]
+                                                         [:content :mapping_ref]])
              :gene_association (select-keys-nested message [[:content :entity_type]
                                                             [:content :gene_id]
                                                             [:content :variation_id]])
