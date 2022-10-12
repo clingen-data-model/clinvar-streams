@@ -161,7 +161,7 @@
    will never have to wait for I/O."
   [reader-fn]
   (let [reader (reader-fn)
-        buffer-size 100
+        buffer-size 1000
         line-counter (atom (bigint 0))
         line-chan (async/chan buffer-size)]
     (letfn [(enqueuer []
@@ -179,10 +179,7 @@
                     :while line]
                 line))]
       (lazy-seq (do (.start (Thread. enqueuer))
-                    (for [i (range)
-                          :let [line (async/<!! line-chan)]
-                          :while line]
-                      line))))))
+                    (dequeuer))))))
 
 (defn lazy-line-reader
   "READER-FN is called to return an open reader.
@@ -228,7 +225,7 @@
                    output-counter :output-counter
                    :or {input-counter (atom 0)
                         output-counter (atom 0)}}]]
-  (letfn [(not-a-dup [msg]
+  (letfn [(not-a-dup? [msg]
             (log/debug :fn :not-a-dup :msg msg)
             (let [output-value (:value msg)
                   is-dup? (ingest/duplicate? db output-value)]
@@ -239,15 +236,26 @@
               (when (not is-dup?)
                 (swap! output-counter inc))
               (not is-dup?)))]
-    (filter not-a-dup messages)
-    #_(if parallelize?
-        (->> messages
-             (partition-all 100)
-             (map #(pmap (fn [msg] [(not-a-dup msg) msg]) %))
-             (flatten-one-level)
-             (filter #(= true (first %)))
-             (map second))
-        (filter not-a-dup messages))))
+    (if parallelize?
+      ;; TODO return this [dup? msg] tuple seq and let caller filter
+      (->> (pmap (fn [msg] [(not-a-dup? msg) msg]) messages)
+           (filter #(= true (first %)))
+           (map second))
+      (filter not-a-dup? messages))))
+
+(defn annotate-is-dup?
+  "Annotates map MSG with :is-dup?, which is true if the message
+   is a duplicate. Writes data to DB to track seen messages."
+  [db msg]
+  (letfn [(get-is-dup [msg]
+            (log/debug :fn :not-a-dup :msg msg)
+            (let [output-value (:value msg)
+                  is-dup? (ingest/duplicate? db output-value)]
+              (when (or (not is-dup?) (= :create-to-update is-dup?))
+                (ingest/store-new! db output-value))
+              (log/debug {:is-dup? is-dup?})
+              is-dup?))]
+    (assoc msg :is-dup? (get-is-dup msg))))
 
 (defn generate-messages-from-diff
   "Takes a diff notification message, and returns a lazy seq of
@@ -259,7 +267,7 @@
                                        storage-protocol
                                        bucket
                                        path)]
-                (->> (lazy-line-reader reader-fn)
+                (->> (lazy-line-reader-threaded reader-fn)
                      (map #(json/parse-string % true))
                      (filter-by-field (-> order-entry :filter :field)
                                       (-> order-entry :filter :value))
@@ -363,9 +371,25 @@
   [m ks]
   (update-in m ks #(json/generate-string %)))
 
+
+(defn seq-counter [s]
+  (reduce (fn [agg val]
+            {:in-count (inc (:in-count agg))
+             :out-count (inc (:out-count agg))
+             :s (concat (:s agg) [val])})
+          {:in-count 0
+           :out-count 0
+           :s []}
+          s)
+
+  (comment
+    {:in-count ()
+     :out-count ()
+     :s ()}))
+
 (defn start [opts kafka-opts]
   (let [output-topic (:kafka-producer-topic opts)
-        max-input-count 1]
+        max-input-count 3]
     (with-open [producer (jc/producer kafka-opts)
                 consumer (jc/consumer kafka-opts)]
       (jc/subscribe consumer [{:topic-name (:kafka-consumer-topic opts)}])
@@ -381,40 +405,24 @@
                           (json/parse-string true))
               input-counter (atom 0)
               output-counter (atom 0)]
-          (doseq [filtered-message (->> (process-clinvar-drop-refactor m-value
-                                                                       (select-keys opts [:storage-protocol]))
-                                        ;; process-clinvar-drop-refactor returns {:key ... :value ...}
-                                        (map #(json-parse-key-in % [:value :content :content]))
+          (doseq [filtered-message
+                  (->> (process-clinvar-drop-refactor m-value
+                                                      (select-keys opts [:storage-protocol]))
+                       ;; process-clinvar-drop-refactor returns [{:key ... :value ...}]
+                       (map #(json-parse-key-in % [:value :content :content]))
 
-                                        (#(dedup-clinvar-raw-seq dedup-db %
-                                                                 {:parallelize? false
-                                                                  :input-counter input-counter
-                                                                  :output-counter output-counter}))
+                       ;; Adds :is-dup? key
+                       (pmap (partial annotate-is-dup? dedup-db))
 
-                                        ;; Seems to be retaining head
-                                        ;; parallelized section.
-                                        ;; The problem may be down to chunking. partition-by return
-                                        ;; might get chunked and the next map tries to realize multiple
-                                        ;; partitions into memory at the same time.
-                                        #_(partition-by #(-> % :value :content :entity_type))
-                                        #_(map #(dedup-clinvar-raw-seq dedup-db %
-                                                                       {:parallelize? false
-                                                                        :input-counter input-counter
-                                                                        :output-counter output-counter}))
-                                        #_flatten-one-level
-                                        ;; TODO this nested threading seems to be retaining the head pointer
-                                        #_((fn [msgs]
-                                             (->> msgs
-                                                  (partition-by #(-> % :value :content :entity_type))
-                                                ;; TODO do some counting on a per-type basis
-                                                  (map #(dedup-clinvar-raw-seq dedup-db %
-                                                                               {:parallelize? true
-                                                                                :input-counter input-counter
-                                                                                :output-counter output-counter}))
-                                                  flatten-one-level))))]
+                       (map #(do (swap! input-counter inc) %))
+
+                       (filter #(not (:is-dup? %)))
+
+                       (map #(dissoc % :is-dup?)))]
             (assert (map? filtered-message) {:msg "Expected map" :filtered-message filtered-message})
             (let [output-message (json-unparse-key-in filtered-message
                                                       [:value :content :content])]
+              (swap! output-counter inc)
               (send-update-to-exchange producer output-topic output-message)))
           (log/info {:msg "Deduplication counts for release"
                      :release-date (:release_date m-value)
