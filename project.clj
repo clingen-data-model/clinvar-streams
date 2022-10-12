@@ -19,10 +19,9 @@
                  [clj-commons/fs "1.5.2"]
                  [fundingcircle/jackdaw "0.7.4"]
                  [com.google.cloud/google-cloud-storage "1.115.0"]
-                 ; timbre and nippy versions here have some conflicts
-                 [com.taoensso/timbre "4.10.0"
-                  :exclusions [com.taoensso/encore]]
-                 [com.taoensso/nippy "3.1.1"]
+                 [com.taoensso/encore "3.24.0"]
+                 [com.taoensso/nippy "3.2.0"]
+                 [com.taoensso/timbre "5.2.1"]
                  [c3p0/c3p0 "0.9.1.2"]
                  [digest/digest "1.4.10"]
                  [nrepl "0.8.3"]
@@ -30,7 +29,9 @@
                  [org.xerial/sqlite-jdbc "3.32.3.2"]]
   :repl-options {:init-ns clinvar-raw.stream
                  :caught clojure.repl/pst
-                 :jvm-opts ["-Xms256m" "-XX:MaxRAMPercentage=25"]}
+                 :jvm-opts ["-Xms256m"
+                            #_"-XX:MaxRAMPercentage=25"
+                            "-Xmx1024m"]}
   :jvm-opts ["-Xms256m"]
   :main clinvar-streams.core
   :aot [clinvar-streams.core]
