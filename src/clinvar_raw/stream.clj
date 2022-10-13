@@ -412,7 +412,9 @@
                        (map #(json-parse-key-in % [:value :content :content]))
 
                        ;; Adds :is-dup? key
-                       (pmap (partial annotate-is-dup? dedup-db))
+                       ;; Changing this to pmap will make the I/O faster, but
+                       ;; only if there enough cores available
+                       (map (partial annotate-is-dup? dedup-db))
 
                        (map #(do (swap! input-counter inc) %))
 
