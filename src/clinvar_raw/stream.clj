@@ -245,7 +245,10 @@
 
 (defn annotate-is-dup?
   "Annotates map MSG with :is-dup?, which is true if the message
-   is a duplicate. Writes data to DB to track seen messages."
+   is a duplicate. Writes data to DB to track seen messages.
+   Expects MSG to be the :value of a kafka message, i.e. the entity
+   payload containing a release_date, content, event_type."
+  ;; TODO SPEC
   [db msg]
   (letfn [(get-is-dup [msg]
             (log/debug :fn :not-a-dup :msg msg)
@@ -253,7 +256,6 @@
                   is-dup? (ingest/duplicate? db output-value)]
               (when (or (not is-dup?) (= :create-to-update is-dup?))
                 (ingest/store-new! db output-value))
-              (log/debug {:is-dup? is-dup?})
               is-dup?))]
     (assoc msg :is-dup? (get-is-dup msg))))
 
@@ -295,6 +297,7 @@
   "Constructs a lazy sequence of output messages based on an input drop file
    from the upstream DSP service.
    Caller should avoid realizing whole sequence into memory."
+  ;; TODO SPEC
   [msg {:keys [storage-protocol]
         :or {storage-protocol "gs://"}}]
   ; 1. parse the drop message to determine where the files are
@@ -371,25 +374,9 @@
   [m ks]
   (update-in m ks #(json/generate-string %)))
 
-
-(defn seq-counter [s]
-  (reduce (fn [agg val]
-            {:in-count (inc (:in-count agg))
-             :out-count (inc (:out-count agg))
-             :s (concat (:s agg) [val])})
-          {:in-count 0
-           :out-count 0
-           :s []}
-          s)
-
-  (comment
-    {:in-count ()
-     :out-count ()
-     :s ()}))
-
 (defn start [opts kafka-opts]
   (let [output-topic (:kafka-producer-topic opts)
-        max-input-count 3]
+        max-input-count Long/MAX_VALUE]
     (with-open [producer (jc/producer kafka-opts)
                 consumer (jc/consumer kafka-opts)]
       (jc/subscribe consumer [{:topic-name (:kafka-consumer-topic opts)}])
@@ -404,7 +391,9 @@
         (let [m-value (-> m :value
                           (json/parse-string true))
               input-counter (atom 0)
-              output-counter (atom 0)]
+              output-counter (atom 0)
+              input-type-counters (atom {})
+              output-type-counters (atom {})]
           (doseq [filtered-message
                   (->> (process-clinvar-drop-refactor m-value
                                                       (select-keys opts [:storage-protocol]))
@@ -413,14 +402,29 @@
 
                        ;; Adds :is-dup? key
                        ;; Changing this to pmap will make the I/O faster, but
-                       ;; only if there enough cores available
+                       ;; only if there are enough cores available
                        (map (partial annotate-is-dup? dedup-db))
 
+                       ;; Counts for individual entity types
+                       (map (fn [m]
+                              (let [entity-type (-> m :value :content :entity_type)
+                                    inc-type-counter (fn [counter-map entity-type]
+                                                       (assert (not (nil? entity-type))
+                                                               (str "nil entity-type for message: " m))
+                                                       (assoc counter-map
+                                                              entity-type
+                                                              (inc (get counter-map entity-type 0))))]
+                                (swap! input-type-counters inc-type-counter entity-type)
+                                (if (:is-dup? m)
+                                  (log/debug {:message "Duplicate found" :msg  m})
+                                  (swap! output-type-counters inc-type-counter entity-type))
+                                m)))
+                       ;; Overall count
                        (map #(do (swap! input-counter inc) %))
-
+                       ;; Filter out duplicates and remove the :is-dup? key
                        (filter #(not (:is-dup? %)))
-
                        (map #(dissoc % :is-dup?)))]
+            ;; TODO SPEC
             (assert (map? filtered-message) {:msg "Expected map" :filtered-message filtered-message})
             (let [output-message (json-unparse-key-in filtered-message
                                                       [:value :content :content])]
@@ -428,6 +432,8 @@
               (send-update-to-exchange producer output-topic output-message)))
           (log/info {:msg "Deduplication counts for release"
                      :release-date (:release_date m-value)
+                     :in-type-counts @input-type-counters
+                     :out-type-counts @output-type-counters
                      :in-count (int @input-counter)
                      :out-count (int @output-counter)
                      :removed-ratio (when (< 0 @input-counter)

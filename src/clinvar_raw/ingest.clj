@@ -3,8 +3,8 @@
   (:require [clinvar-streams.storage.rocksdb :as rocksdb]
             [clinvar-streams.util :refer [select-keys-nested]]
             [clojure.data.json :as json]
-            [clojure.zip       :as zip]
             [clojure.walk :refer [postwalk]]
+            [clojure.zip       :as zip]
             [digest]
             [taoensso.timbre :as log]))
 
@@ -69,8 +69,6 @@
 
      (map? edn) (apply (partial assoc edn)
                        (apply concat (for [[k v] edn] [k (disorder v)])))
-     #_(for [[k v] edn] (assoc edn k (disorder v)))
-
      :else edn)))
 
 (defn differ?
@@ -82,11 +80,9 @@
     (when-not (= now-edn was-edn)
       (hash now-edn))))
 
-;; (defstate dedup-db
-;;   :start (rocksdb/open "clinvar-raw-dedup.db")
-;;   :stop (rocksdb/close dedup-db))
-
-(defn clinvar-concept-identity [message]
+(defn clinvar-concept-identity
+  ;; TODO SPEC
+  [message]
   (let [entity-type (-> message :content :entity_type)
         id (case entity-type
              :trait_mapping (select-keys-nested message [[:content :entity_type]
@@ -102,16 +98,11 @@
     (when (empty? id) (log/error :fn :duplicate? :msg "Key was empty" :id id :message message))
     id))
 
-;; (defn clinvar-message-without-meta
-;;   "Drops the fields in the wrapper around :content.
-;;    Ex: :release_date, :event_type "
-;;   [message]
-;;   {:content (:content message)})
-
 (defn store-new!
   "Takes edn M, stores its hash in the dedup database.
    Stored as ^Integer (hash m) -> ^String (-> m digest/md5)
    rocks-put calls nippy/freeze on the value. Could add a put-raw-value."
+  ;; TODO SPEC
   [db m]
   (let [k (clinvar-concept-identity m)
         v (-> m (dissoc :release_date) disorder)]
@@ -126,6 +117,7 @@
    previous was a create and the current is an update, returns :create-to-update.
    Caller may want to use this to persist the update.
    TODO change keys to sorted vecs and hash"
+  ;; TODO SPEC
   [db current-m #_{:keys [persist-create-update-dup?]
                    :or {persist-create-update-dup? true}}]
   (let [k (clinvar-concept-identity current-m)
