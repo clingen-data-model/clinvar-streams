@@ -19,25 +19,25 @@
            (java.time Duration)
            (org.apache.kafka.common TopicPartition)))
 
-(def order-of-processing [{:type "gene"}
-                          {:type "variation" :filter {:field :subclass_type :value "SimpleAllele"}}
-                          {:type "variation" :filter {:field :subclass_type :value "Haplotype"}}
-                          {:type "variation" :filter {:field :subclass_type :value "Genotype"}}
-                          {:type "gene_association"}
-                          {:type "trait"}
-                          {:type "trait_set"}
-                          {:type "submitter"}
-                          {:type "submission"}
-                          {:type "clinical_assertion_trait"}
-                          {:type "clinical_assertion_trait_set"}
-                          {:type "clinical_assertion_observation"}
-                          {:type "clinical_assertion"}
-                          {:type "clinical_assertion_variation" :filter {:field :subclass_type :value "SimpleAllele"}}
-                          {:type "clinical_assertion_variation" :filter {:field :subclass_type :value "Haplotype"}}
-                          {:type "clinical_assertion_variation" :filter {:field :subclass_type :value "Genotype"}}
+(def order-of-processing [#_{:type "gene"}
+                          #_{:type "variation" :filter {:field :subclass_type :value "SimpleAllele"}}
+                          #_{:type "variation" :filter {:field :subclass_type :value "Haplotype"}}
+                          #_{:type "variation" :filter {:field :subclass_type :value "Genotype"}}
+                          #_{:type "gene_association"}
+                          #_{:type "trait"}
+                          #_{:type "trait_set"}
+                          #_{:type "submitter"}
+                          #_{:type "submission"}
+                          #_{:type "clinical_assertion_trait"}
+                          #_{:type "clinical_assertion_trait_set"}
+                          #_{:type "clinical_assertion_observation"}
+                          #_{:type "clinical_assertion"}
+                          #_{:type "clinical_assertion_variation" :filter {:field :subclass_type :value "SimpleAllele"}}
+                          #_{:type "clinical_assertion_variation" :filter {:field :subclass_type :value "Haplotype"}}
+                          #_{:type "clinical_assertion_variation" :filter {:field :subclass_type :value "Genotype"}}
                           {:type "trait_mapping"}
-                          {:type "rcv_accession"}
-                          {:type "variation_archive"}])
+                          #_{:type "rcv_accession"}
+                          #_{:type "variation_archive"}])
 
 (def delete-order-of-processing (reverse order-of-processing))
 
@@ -205,18 +205,6 @@
 #_(defn unchunk [s]
     (lazy-cat [(first s)] (unchunk (rest s))))
 
-#_(defn concatenated-lazy-line-seq
-    [storage-protocol & path-seg-groups]
-    (when (seq path-seg-groups)
-      (lazy-cat
-       (let [path-segs (first path-seg-groups)
-             reader-fn (partial apply
-                                (partial construct-reader
-                                         storage-protocol)
-                                path-segs)]
-         (->> (lazy-line-reader reader-fn)))
-       (concatenated-lazy-line-seq storage-protocol (rest path-seg-groups)))))
-
 (defn dedup-clinvar-raw-seq
   "Takes a kafka message seq [{:key ... :value ...} ...] and deduplicate it.
    Optionally takes a map of atoms to count inputs and outputs for monitoring purposes."
@@ -251,9 +239,11 @@
   ;; TODO SPEC
   [db msg]
   (letfn [(get-is-dup [msg]
-            (log/debug :fn :not-a-dup :msg msg)
+            (log/debug :fn :get-is-dup :msg msg)
             (let [output-value (:value msg)
                   is-dup? (ingest/duplicate? db output-value)]
+              (when is-dup?
+                (log/info :fn :annotate-is-dup? :is-dup? is-dup?))
               (when (or (not is-dup?) (= :create-to-update is-dup?))
                 (ingest/store-new! db output-value))
               is-dup?))]
@@ -376,7 +366,7 @@
 
 (defn start [opts kafka-opts]
   (let [output-topic (:kafka-producer-topic opts)
-        max-input-count Long/MAX_VALUE]
+        max-input-count 1]
     (with-open [producer (jc/producer kafka-opts)
                 consumer (jc/consumer kafka-opts)]
       (jc/subscribe consumer [{:topic-name (:kafka-consumer-topic opts)}])
@@ -400,6 +390,8 @@
                        ;; process-clinvar-drop-refactor returns [{:key ... :value ...}]
                        (map #(json-parse-key-in % [:value :content :content]))
 
+                       #_(filter #(= "SCV000896148" (-> % :value :content :clinical_assertion_id)))
+
                        ;; Adds :is-dup? key
                        ;; Changing this to pmap will make the I/O faster, but
                        ;; only if there are enough cores available
@@ -415,8 +407,13 @@
                                                               entity-type
                                                               (inc (get counter-map entity-type 0))))]
                                 (swap! input-type-counters inc-type-counter entity-type)
+                                (when (= "SCV000896148" (-> m :value :content :clinical_assertion_id))
+                                  (log/info :medgen_id "C4551647"
+                                            :clinical_assertion_id "SCV000896148"
+                                            :msg m
+                                            :is_dup? (:is-dup? m)))
                                 (if (:is-dup? m)
-                                  (log/debug {:message "Duplicate found" :msg  m})
+                                  (log/info {:message "Duplicate found" :msg  m})
                                   (swap! output-type-counters inc-type-counter entity-type))
                                 m)))
                        ;; Overall count
@@ -434,6 +431,11 @@
                      :release-date (:release_date m-value)
                      :in-type-counts @input-type-counters
                      :out-type-counts @output-type-counters
+                     :deduped-type-counts (into {}
+                                                (letfn [(for-type [type]
+                                                          (- (get @input-type-counters type 0)
+                                                             (get @output-type-counters type 0)))]
+                                                  (map #(vector % (for-type %)) (set (keys @input-type-counters)))))
                      :in-count (int @input-counter)
                      :out-count (int @output-counter)
                      :removed-ratio (when (< 0 @input-counter)
