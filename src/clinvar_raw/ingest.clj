@@ -134,29 +134,3 @@
                  (= (:content previous-v) (:content current-v)))
           :create-to-update ;; truthy
           false))))
-
-
-(comment
-  (require '[cheshire.core]
-           '[mount.core :refer [defstate]]
-           '[clojure.java.io :as io])
-  (declare test-db)
-  (defstate test-db
-    :start (rocksdb/open "testfn.db")
-    :stop (rocksdb/close test-db))
-
-  (def records (-> "SCV000896148.C4551647.txt"
-                   io/reader
-                   line-seq
-                   (->> (map #(json/read-str % :key-fn keyword))
-                        (map #(assoc % :entity_type "trait_mapping"))
-                        (map #(identity {:release_date "2019-07-01" :event_type "create" :content %})))))
-  (mount.core/stop #'test-db)
-  (rocksdb/rocks-destroy! "testfn.db")
-  (mount.core/start #'test-db)
-
-  (require '[clinvar-raw.stream :as stream])
-  (->> records (map (partial stream/annotate-is-dup? test-db)))
-
-
-  ())
