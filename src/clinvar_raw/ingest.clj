@@ -81,18 +81,18 @@
       (hash now-edn))))
 
 (defn clinvar-concept-identity
-  ;; TODO SPEC
+  ;; TODO SPEC, for real
   [message]
   (let [entity-type (-> message :content :entity_type)
         id (case entity-type
-             :trait_mapping (select-keys-nested message [[:content :entity_type]
-                                                         [:content :clinical_assertion_id]
-                                                         [:content :mapping_value]
-                                                         [:content :mapping_type]
-                                                         [:content :mapping_ref]])
-             :gene_association (select-keys-nested message [[:content :entity_type]
-                                                            [:content :gene_id]
-                                                            [:content :variation_id]])
+             "trait_mapping" (select-keys-nested message [[:content :entity_type]
+                                                          [:content :clinical_assertion_id]
+                                                          [:content :mapping_value]
+                                                          [:content :mapping_type]
+                                                          [:content :mapping_ref]])
+             "gene_association" (select-keys-nested message [[:content :entity_type]
+                                                             [:content :gene_id]
+                                                             [:content :variation_id]])
              (select-keys-nested message [[:content :entity_type]
                                           [:content :id]]))]
     (when (empty? id) (log/error :fn :duplicate? :msg "Key was empty" :id id :message message))
@@ -134,3 +134,29 @@
                  (= (:content previous-v) (:content current-v)))
           :create-to-update ;; truthy
           false))))
+
+
+(comment
+  (require '[cheshire.core]
+           '[mount.core :refer [defstate]]
+           '[clojure.java.io :as io])
+  (declare test-db)
+  (defstate test-db
+    :start (rocksdb/open "testfn.db")
+    :stop (rocksdb/close test-db))
+
+  (def records (-> "SCV000896148.C4551647.txt"
+                   io/reader
+                   line-seq
+                   (->> (map #(json/read-str % :key-fn keyword))
+                        (map #(assoc % :entity_type "trait_mapping"))
+                        (map #(identity {:release_date "2019-07-01" :event_type "create" :content %})))))
+  (mount.core/stop #'test-db)
+  (rocksdb/rocks-destroy! "testfn.db")
+  (mount.core/start #'test-db)
+
+  (require '[clinvar-raw.stream :as stream])
+  (->> records (map (partial stream/annotate-is-dup? test-db)))
+
+
+  ())
