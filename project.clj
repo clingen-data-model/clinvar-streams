@@ -5,7 +5,6 @@
             :url "https://www.eclipse.org/legal/epl-2.0/"}
   :dependencies [[org.clojure/clojure "1.10.1"]
                  [org.clojure/core.async "1.2.603"]
-                 [org.clojure/tools.namespace "1.1.0"]
                  [org.clojure/java.jdbc "0.7.11"]
                  [org.clojure/tools.cli "1.0.206"]
                  [io.pedestal/pedestal.service "0.5.7"]
@@ -25,6 +24,7 @@
                  [c3p0/c3p0 "0.9.1.2"]
                  [digest/digest "1.4.10"]
                  [nrepl "0.8.3"]
+                 [org.clojure/tools.namespace "1.1.0"]
                  [org.postgresql/postgresql "42.2.16"]
                  [org.xerial/sqlite-jdbc "3.32.3.2"]]
   :repl-options {:init-ns clinvar-raw.stream
@@ -38,10 +38,11 @@
   :resource-paths ["resources"]
   :target-path "target/%s"
   :auto-clean false
-  :profiles {;:run-with-repl {:main clinvar-streams.core-repl
-             ;            :repl-options {:init-ns clinvar-streams.core-repl}}
-             :uberjar {:uberjar-name "clinvar-streams.jar"
-                       :aot [clinvar-streams.core]}
-             :testdata {:main clinvar-raw.generate-local-topic
-                        ;:aot [#"clinvar-raw.*"]
-                        :repl-options {:init-ns clinvar-raw.generate-local-topic}}})
+  :profiles
+  {#_#_:run-with-repl {:main clinvar-streams.core-repl
+                       :repl-options {:init-ns clinvar-streams.core-repl}}
+   :uberjar {:uberjar-name "clinvar-streams.jar"
+             :aot [clinvar-streams.core]}
+   :testdata {:main clinvar-raw.generate-local-topic
+                                        ;:aot [#"clinvar-raw.*"]
+              :repl-options {:init-ns clinvar-raw.generate-local-topic}}})

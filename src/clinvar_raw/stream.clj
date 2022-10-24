@@ -19,6 +19,8 @@
            (java.time Duration)
            (org.apache.kafka.common TopicPartition)))
 
+
+
 (def order-of-processing [{:type "gene"}
                           {:type "variation" :filter {:field :subclass_type :value "SimpleAllele"}}
                           {:type "variation" :filter {:field :subclass_type :value "Haplotype"}}
