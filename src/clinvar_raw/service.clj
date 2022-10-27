@@ -1,19 +1,18 @@
 (ns clinvar-raw.service
+  "Pedestal server to handle communication with Kubernetes."
   (:require [clinvar-raw.stream :as stream]
             [io.pedestal.http.route :as route]
             [io.pedestal.http :as http]
             [mount.core :refer [defstate]]
-            [taoensso.timbre :as log])
-  (:import (java.time Duration Instant)
-           (java.util Date)))
+            [taoensso.timbre :as log]))
 
-
+;;; docstrings? 
 (defn pre-stop [request]
   (log/info "In prestop hook handler")
-  (let [prn-log #(log/info "Shutting down clinvar-raw streaming...")]
+  (let [prn-log #(log/info "Shutting down clinvar-raw streaming...")] ;; consider log/error, warn
     (prn-log)
     (reset! stream/listening-for-drop false)
-    (Thread/sleep (.toMillis (Duration/ofSeconds 10))))
+    (Thread/sleep (* 10 1000)))
   (log/info (str "Finished shutting down streaming mode."
                  " Processing thread may continue if a release is in progress."))
   {:status 200

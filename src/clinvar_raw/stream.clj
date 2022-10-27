@@ -163,6 +163,9 @@
    will never have to wait for I/O."
   [reader-fn]
   (let [reader (reader-fn)
+        ;; why a function that returns a reader, rather than a reader?
+        ;; also, how is the reader closed? (this tends to make the lazy-seq abstraction hard
+        ;; to use in the context of an open reader) =tristan
         buffer-size 1000
         line-counter (atom (bigint 0))
         line-chan (async/chan buffer-size)]
@@ -180,6 +183,7 @@
                     :let [line (async/<!! line-chan)]
                     :while line]
                 line))]
+      ;; is there a reason .start is in a do block inside the lazy-seq call?
       (lazy-seq (do (.start (Thread. enqueuer))
                     (dequeuer))))))
 
@@ -283,6 +287,7 @@
            flatten-one-level
            process-files))))
 
+;; why '-refactor'? =tristan
 (defn process-clinvar-drop-refactor
   "Constructs a lazy sequence of output messages based on an input drop file
    from the upstream DSP service.
@@ -344,7 +349,7 @@
      (log/debug :min-offset min-offset :max-offset max-offset)
      (consumer-lazy-seq-bounded consumer
                                 max-offset))))
-
+;; Why declare dedup-db immediately before defining it? =tristan
 (declare dedup-db)
 (defstate dedup-db
   :start (rocksdb/open "clinvar-raw-dedup.db")
@@ -364,11 +369,14 @@
   [m ks]
   (update-in m ks #(json/generate-string %)))
 
+;; Region has 71 lines, 385 words, and 4356 characters. Ouch. =tristan
 (defn start [opts kafka-opts]
   (let [output-topic (:kafka-producer-topic opts)
-        max-input-count Long/MAX_VALUE]
+        max-input-count (or (::max-input-count opts)
+                            Long/MAX_VALUE)]
     (with-open [producer (jc/producer kafka-opts)
                 consumer (jc/consumer kafka-opts)]
+      ;; the next four lines could probably live in their own function =tristan
       (jc/subscribe consumer [{:topic-name (:kafka-consumer-topic opts)}])
       (when (:kafka-reset-consumer-offset opts)
         (log/info "Resetting to start of input topic")
@@ -376,10 +384,17 @@
       (log/info "Subscribed to consumer topic " (:kafka-consumer-topic opts))
       (doseq [m (-> consumer
                     (consumer-lazy-seq-infinite)
-                    (->> (take max-input-count)))
+                    (->> (take max-input-count))) ;; (consumer-lazy-seq-infinite consumer) =tristan
+              ;; also these messages are still the release notification messages, right? 
+              ;; Stop listening after shutdown, what about shut down in the middle of processing?
+              ;; requires service to 'know' everything that needs to happen during shutdown.
+              ;; there is probably a cleaner way of architecting this =tristan.
               :while @listening-for-drop]
         (let [m-value (-> m :value
                           (json/parse-string true))
+              ;; This makes sense if you want to interrogate the state of a running process
+              ;; but this is probably impossible with these embedded in a let block
+              ;; otherwise perhaps consider a more functional approach applying reduce?
               input-counter (atom 0)
               output-counter (atom 0)
               input-type-counters (atom {})
