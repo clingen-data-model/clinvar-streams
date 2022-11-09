@@ -1,13 +1,12 @@
 (ns clinvar-raw.core
-  (:require [clojure.pprint :as pprint]
-            [mount.core]
+  (:require [mount.core :as mount]
             [clinvar-raw.stream :as stream]
             [clinvar-raw.service]
             [clinvar-raw.ingest]))
 
 (defn start-states! []
-  (mount.core/start #'clinvar-raw.stream/dedup-db
-                    #'clinvar-raw.service/service))
+  (mount/start #'clinvar-raw.stream/dedup-db
+               #'clinvar-raw.service/service))
 
 (defn -main [& args]
   (start-states!)

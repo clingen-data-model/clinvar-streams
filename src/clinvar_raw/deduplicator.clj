@@ -1,6 +1,6 @@
 (ns clinvar-raw.deduplicator
   (:require [cheshire.core :as json]
-            [clinvar-raw.config :as cfg]
+            [clinvar-raw.config :as config]
             [clinvar-raw.ingest :as ingest]
             [clinvar-raw.stream :as stream]
             [clinvar-streams.storage.rocksdb :as rocksdb]
@@ -17,13 +17,13 @@
   `data` can be a string or json-serializable object like a map"
   [producer topic {:keys [key value]}]
   (log/tracef "Sending message with key %s to topic %s" key topic)
-  (jc/send! producer (jd/->ProducerRecord {:topic-name topic}
-                                          key
-                                          (if (string? value) value (json/generate-string value)))))
+  (->> (if (string? value) value (json/generate-string value))
+       (jd/->ProducerRecord {:topic-name topic} key)
+       (jc/send! producer)))
 
 (defn -main [& args]
-  (let [opts (cfg/app-config)
-        kafka-opts (-> (cfg/kafka-config opts)
+  (let [opts (config/app-config)
+        kafka-opts (-> (config/kafka-config opts)
                        (assoc "max.poll.records" "1000"))
         output-topic (:kafka-producer-topic opts)
         running? (atom true)
@@ -51,9 +51,7 @@
 
 (defn dedup-seq [s]
   (let [db (rocksdb/open "dedup-seq.db")]
-    (letfn [(seq-with-db [s db]
-              (lazy-cat s (do (.close db) nil)))
-            (pred [e] (when (not (ingest/duplicate? db e))
+    (letfn [(pred [e] (when (not (ingest/duplicate? db e))
                         (ingest/store-new! db e)
                         true))]
       (filter pred s))))
@@ -89,71 +87,26 @@
   [input-filename output-filename]
   (with-open [reader (make-reader input-filename)
               writer (make-writer output-filename)]
-    (let [input-counter (atom (bigint 0))
-          output-counter (atom (bigint 0))
-          create-to-update-counter (atom (bigint 0))
-          db-path "deduplicate-file.db"
-          _ (rocksdb/close (rocksdb/open db-path))
-          _ (rocksdb/rocks-destroy! db-path)
-          db (rocksdb/open db-path)]
-
-      (doseq [[out-i out-m]
-              (->> (line-seq reader)
-                   (map #(json/parse-string % true))
-                   (map #(json-parse-key-in % [:content :content]))
-                   (partition-by #(vector [(-> % :release_date)
-                                           (-> % :content :entity_type)]))
-                   (map (fn [batch]
-                          (pmap (fn [value]
-                                  (swap! input-counter inc)
-                                  (let [mdup? (ingest/duplicate? db value)]
-                                    (when (= :create-to-update mdup?)
-                                      (swap! create-to-update-counter inc))
-                                    (ingest/store-new! db value)
-                                    (when (not mdup?)
-                                      (swap! output-counter inc)
-                                      value)))
-                                batch)))
-                   flatten-one-level
-                   (filter #(not (nil? %)))
-                   (map-indexed vector))]
-        (log/info :out-i out-i :release_date (:release_date out-m))
-        (let [;; Put the nested content back in a string, discard the offset/value wrapper
-              out-m (json-unparse-key-in out-m [:content :content])]
-          (.write writer (json/generate-string out-m))
-          (.write writer "\n")))
-      (log/info {:input-counter @input-counter
-                 :output-counter @output-counter
-                 :create-to-update-counter @create-to-update-counter}))))
-
-
-(defn -deduplicate-file2
-  "Reads event JSON lines from INPUT-FILENAME. Deduplicates and writes
-   them to OUTPUT-FILENAME."
-  [input-filename output-filename]
-  (with-open [reader (make-reader input-filename)
-              writer (make-writer output-filename)]
-    (let [input-counter (atom (bigint 0))
-          output-counter (atom (bigint 0))
-          create-to-update-counter (atom (bigint 0))
-          db-path "deduplicate-file.db"
-          _ (rocksdb/close (rocksdb/open db-path))
-          _ (rocksdb/rocks-destroy! db-path)
-          db (rocksdb/open db-path)]
-
-      (doseq [[out-i out-m]
-              (->> (line-seq reader)
-                   (map #(json/parse-string % true))
-                   (map #(json-parse-key-in % [:content :content]))
-                   (map #(merge {:value %}))
-                   (#(stream/dedup-clinvar-raw-seq db % {:input-counter input-counter
-                                                         :output-counter output-counter}))
-                   (map-indexed vector))]
-        (log/info :out-i out-i :release_date (:release_date out-m))
-        (let [;; Put the nested content back in a string, discard the offset/value wrapper
-              out-m (json-unparse-key-in out-m [:content :content])]
-          (.write writer (json/generate-string out-m))
-          (.write writer "\n")))
-      (log/info {:input-counter @input-counter
-                 :output-counter @output-counter
-                 :create-to-update-counter @create-to-update-counter}))))
+    (let [db-path "deduplicate-file.db"]
+      (rocksdb/close (rocksdb/open db-path))
+      (rocksdb/rocks-destroy! db-path)
+      (let [input-counter (atom (bigint 0))
+            output-counter (atom (bigint 0))
+            create-to-update-counter (atom (bigint 0))
+            db (rocksdb/open db-path)]
+        (doseq [[out-i out-m]
+                (->> (line-seq reader)
+                     (map #(json/parse-string % true))
+                     (map #(json-parse-key-in % [:content :content]))
+                     (map #(merge {:value %}))
+                     (#(stream/dedup-clinvar-raw-seq db % {:input-counter input-counter
+                                                           :output-counter output-counter}))
+                     (map-indexed vector))]
+          (log/info :out-i out-i :release_date (:release_date out-m))
+          (let [;; Put the nested content back in a string
+                out-m (json-unparse-key-in out-m [:content :content])]
+            (.write writer (json/generate-string out-m))
+            (.write writer "\n")))
+        (log/info {:input-counter @input-counter
+                   :output-counter @output-counter
+                   :create-to-update-counter @create-to-update-counter})))))

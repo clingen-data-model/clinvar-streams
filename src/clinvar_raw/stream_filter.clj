@@ -1,9 +1,7 @@
 (ns clinvar-raw.stream-filter
   (:require [cheshire.core :as json]
-            [clinvar-raw.config :as cfg]
-            [clinvar-streams.util :refer [select-keys-nested
-                                          gzip-file-reader
-                                          gzip-file-writer]]
+            [clinvar-raw.config :as config]
+            [clinvar-streams.util :as util]
             [clojure.java.io :as io]
             [jackdaw.client :as jc]
             [taoensso.timbre :as log])
@@ -34,9 +32,9 @@
 
 
 (defn topic-download-gzip []
-  (let [app-config (assoc (cfg/app-config)
+  (let [app-config (assoc (config/app-config)
                           :kafka-consumer-topic "clinvar-raw-dedup")
-        kafka-opts (-> (cfg/kafka-config app-config)
+        kafka-opts (-> (config/kafka-config app-config)
                        (assoc "max.poll.records" "10000")
                        ;; 10MiB fetch
                        (assoc "max.partition.fetch.bytes" (int (* 10 1024 1024))))
@@ -48,7 +46,7 @@
       (jc/subscribe consumer [{:topic-name (:kafka-consumer-topic app-config)}])
       (jc/poll consumer 0)
       (jc/seek-to-beginning-eager consumer)
-      (with-open [writer (gzip-file-writer output-filename)]
+      (with-open [writer (util/gzip-file-writer output-filename)]
         (while @looping?
           (let [batch (jc/poll consumer (Duration/ofSeconds 10))]
             (log/infof "Read %s records. First record offset: %s, date: %s"
@@ -56,9 +54,9 @@
                        (-> batch first :offset)
                        (-> batch first :value
                            (json/parse-string true)
-                           (select-keys-nested [:release_date
-                                                :event_type
-                                                [:content :entity_type]])
+                           (util/select-keys-nested [:release_date
+                                                     :event_type
+                                                     [:content :entity_type]])
                            json/generate-string))
             (if (empty? batch)
               (if (<= max-empty-batches @empty-batch-count)
@@ -77,8 +75,8 @@
                                      #_(map json/generate-string)))))))))))))
 
 (defn -main [& args]
-  (let [app-config (cfg/app-config)
-        kafka-opts (-> (cfg/kafka-config app-config)
+  (let [app-config (config/app-config)
+        kafka-opts (-> (config/kafka-config app-config)
                        (assoc "max.poll.records" "1000"))
         looping? (atom true)
         output-filename (str (:kafka-consumer-topic app-config) "-filtered.txt")

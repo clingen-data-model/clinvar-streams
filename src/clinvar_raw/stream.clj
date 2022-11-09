@@ -1,51 +1,50 @@
 (ns clinvar-raw.stream
   (:require [cheshire.core :as json]
-            [clinvar-raw.config :as cfg]
+            [clinvar-raw.config :as config]
             [clinvar-raw.ingest :as ingest]
             [clinvar-streams.storage.rocksdb :as rocksdb]
             [clinvar-streams.stream-utils :refer [get-max-offset
                                                   get-min-offset]]
-            [clinvar-streams.util :refer [parse-nested-content]]
             [clojure.core.async :as async]
             [clojure.java.io :as io]
             [jackdaw.client :as jc]
             [jackdaw.data :as jd]
             [mount.core :refer [defstate]]
             [taoensso.timbre :as log])
-  (:import (com.google.cloud.storage BlobId StorageOptions)
-           com.google.cloud.storage.Blob$BlobSourceOption
-           java.io.BufferedReader
-           java.nio.channels.Channels
+  (:import (com.google.cloud.storage
+            BlobId StorageOptions Blob$BlobSourceOption)
+           (java.io BufferedReader)
+           (java.nio.channels Channels)
            (java.time Duration)
            (org.apache.kafka.common TopicPartition)))
 
-
-
-(def order-of-processing [{:type "gene"}
-                          {:type "variation" :filter {:field :subclass_type :value "SimpleAllele"}}
-                          {:type "variation" :filter {:field :subclass_type :value "Haplotype"}}
-                          {:type "variation" :filter {:field :subclass_type :value "Genotype"}}
-                          {:type "gene_association"}
-                          {:type "trait"}
-                          {:type "trait_set"}
-                          {:type "submitter"}
-                          {:type "submission"}
-                          {:type "clinical_assertion_trait"}
-                          {:type "clinical_assertion_trait_set"}
-                          {:type "clinical_assertion_observation"}
-                          {:type "clinical_assertion"}
-                          {:type "clinical_assertion_variation" :filter {:field :subclass_type :value "SimpleAllele"}}
-                          {:type "clinical_assertion_variation" :filter {:field :subclass_type :value "Haplotype"}}
-                          {:type "clinical_assertion_variation" :filter {:field :subclass_type :value "Genotype"}}
-                          {:type "trait_mapping"}
-                          {:type "rcv_accession"}
-                          {:type "variation_archive"}])
+(def order-of-processing
+  [{:type "gene"}
+   {:type "variation" :filter {:field :subclass_type :value "SimpleAllele"}}
+   {:type "variation" :filter {:field :subclass_type :value "Haplotype"}}
+   {:type "variation" :filter {:field :subclass_type :value "Genotype"}}
+   {:type "gene_association"}
+   {:type "trait"}
+   {:type "trait_set"}
+   {:type "submitter"}
+   {:type "submission"}
+   {:type "clinical_assertion_trait"}
+   {:type "clinical_assertion_trait_set"}
+   {:type "clinical_assertion_observation"}
+   {:type "clinical_assertion"}
+   {:type "clinical_assertion_variation" :filter {:field :subclass_type :value "SimpleAllele"}}
+   {:type "clinical_assertion_variation" :filter {:field :subclass_type :value "Haplotype"}}
+   {:type "clinical_assertion_variation" :filter {:field :subclass_type :value "Genotype"}}
+   {:type "trait_mapping"}
+   {:type "rcv_accession"}
+   {:type "variation_archive"}])
 
 (def delete-order-of-processing (reverse order-of-processing))
 
-(def event-procedures [{:event-type :create :order order-of-processing :filter-string "created"}
-                       {:event-type :update :order order-of-processing :filter-string "updated"}
-                       {:event-type :delete :order delete-order-of-processing :filter-string "deleted"}])
+(def event-procedures
+  [{:event-type :create :order order-of-processing :filter-string "created"}
+   {:event-type :update :order order-of-processing :filter-string "updated"}
+   {:event-type :delete :order delete-order-of-processing :filter-string "deleted"}])
 
 (def gc-storage (.getService (StorageOptions/getDefaultInstance)))
 
@@ -283,7 +282,7 @@
            flatten-one-level
            process-files))))
 
-(defn process-clinvar-drop-refactor
+(defn process-clinvar-drop
   "Constructs a lazy sequence of output messages based on an input drop file
    from the upstream DSP service.
    Caller should avoid realizing whole sequence into memory."
@@ -292,7 +291,7 @@
         :or {storage-protocol "gs://"}}]
   ; 1. parse the drop message to determine where the files are
   ; this will return the folder and bucket and file manifest
-  (log/info {:fn :process-clinvar-drop-refactor :msg "Processing drop message" :drop-message msg})
+  (log/info {:fn :process-clinvar-drop :msg "Processing drop message" :drop-message msg})
   (let [parsed-drop-record (if (string? msg) (json/parse-string msg true) msg)
         release-date (:release_date parsed-drop-record)]
     (lazy-cat
@@ -301,7 +300,7 @@
      [(create-sentinel-message release-date :end)])))
 
 (defn consumer-lazy-seq-bounded
-  "Consumes a single-partition topic using kafka-config.
+  "Consumes a single-partition topic.
   Consumes messages up to the latest offset at the time the function was initially called.
   Optionally resets the consumer group to the beginning if reset-to-beginning? is true
   Closes the consumer when the end-offset is reached."
@@ -320,16 +319,13 @@
     (lazy-seq (do-poll))))
 
 (defn consumer-lazy-seq-infinite
-  "Consumes a single-partition topic using kafka-config.
-  Consumes messages up to the latest offset at the time the function was initially called.
-  Optionally resets the consumer group to the beginning if reset-to-beginning? is true
-  Closes the consumer when the end-offset is reached."
+  "Consumes a single-partition topic using consumer-lazy-seq-bounded."
   ([consumer]
    (consumer-lazy-seq-bounded consumer ##Inf)))
 
 (defn consumer-lazy-seq-full-topic
-  "Consumes a single-partition topic using kafka-config, but discards any group.id in order
-   to consumer in anonymous mode (no consumer group).
+  "Consumes a single-partition topic using kafka-config,
+   but discards any group.id in order to consumer in anonymous mode (no consumer group).
    Consumes messages up to the latest offset at the time the function was initially called.
    Optionally resets the consumer group to the beginning if reset-to-beginning? is true"
   ([topic-name kafka-config]
@@ -337,15 +333,12 @@
          ;; get-max-offset is actually the "next" offset.
          ;; Consider changing get-max-offset to subtract 1
          max-offset (dec (get-max-offset topic-name 0))
-         consumer (jc/consumer (-> kafka-config
-                                   (dissoc "group.id")))]
+         consumer (jc/consumer (dissoc kafka-config "group.id"))]
      (jc/assign-all consumer [topic-name])
      (jc/seek consumer (TopicPartition. topic-name 0) min-offset)
      (log/debug :min-offset min-offset :max-offset max-offset)
-     (consumer-lazy-seq-bounded consumer
-                                max-offset))))
+     (consumer-lazy-seq-bounded consumer max-offset))))
 
-(declare dedup-db)
 (defstate dedup-db
   :start (rocksdb/open "clinvar-raw-dedup.db")
   :stop (rocksdb/close dedup-db))
@@ -365,29 +358,27 @@
   (update-in m ks #(json/generate-string %)))
 
 (defn start [opts kafka-opts]
-  (let [output-topic (:kafka-producer-topic opts)
-        max-input-count Long/MAX_VALUE]
+  (let [output-topic (:kafka-producer-topic opts)]
     (with-open [producer (jc/producer kafka-opts)
-                consumer (jc/consumer kafka-opts)]
+                consumer (jc/consumer kafka-opts)
+                max-input-count (:DX_CV_RAW_MAX_INPUT_COUNT opts)]
       (jc/subscribe consumer [{:topic-name (:kafka-consumer-topic opts)}])
       (when (:kafka-reset-consumer-offset opts)
         (log/info "Resetting to start of input topic")
         (jc/seek-to-beginning-eager consumer))
       (log/info "Subscribed to consumer topic " (:kafka-consumer-topic opts))
-      (doseq [m (-> consumer
-                    (consumer-lazy-seq-infinite)
-                    (->> (take max-input-count)))
+      (doseq [m (cond->> (consumer-lazy-seq-infinite consumer)
+                  max-input-count (take max-input-count))
               :while @listening-for-drop]
-        (let [m-value (-> m :value
-                          (json/parse-string true))
+        (let [m-value (-> m :value (json/parse-string true))
               input-counter (atom 0)
               output-counter (atom 0)
               input-type-counters (atom {})
               output-type-counters (atom {})]
           (doseq [filtered-message
-                  (->> (process-clinvar-drop-refactor m-value
-                                                      (select-keys opts [:storage-protocol]))
-                       ;; process-clinvar-drop-refactor returns [{:key ... :value ...}]
+                  (->> (process-clinvar-drop m-value
+                                             (select-keys opts [:storage-protocol]))
+                       ;; process-clinvar-drop returns [{:key ... :value ...}]
                        (map #(json-parse-key-in % [:value :content :content]))
 
                        ;; Adds :is-dup? key
@@ -438,12 +429,12 @@
 
 (defn repl-test []
   (reset-db)
-  (let [opts (-> (cfg/app-config)
+  (let [opts (-> (config/app-config)
                  (assoc :kafka-consumer-topic "broad-dsp-clinvar")
                  (assoc :kafka-producer-topic "clinvar-raw-dedup")
                  (assoc :kafka-reset-consumer-offset true))
-        kafka-config (-> (cfg/kafka-config opts)
-                         (assoc  "group.id" "kyle-dev"))]
+        kafka-config (-> (config/kafka-config opts)
+                         (assoc  "group.id" "local-dev"))]
     (start opts kafka-config)))
 
 (comment
@@ -452,7 +443,7 @@
                      io/reader
                      line-seq
                      (->> (map #(json/parse-string % true))
-                          (map parse-nested-content)
+                          (map #(json-parse-key-in % [:content :content]))
                           (map (fn [m] {:value m}))))]
     (log/info :message-count (count messages))
     (let [deduped (into [] (dedup-clinvar-raw-seq dedup-db messages))]
@@ -462,6 +453,6 @@
 
 
 (defn start-with-env []
-  (let [opts (cfg/app-config)
-        kafka-opts (cfg/kafka-config opts)]
+  (let [opts (config/app-config)
+        kafka-opts (config/kafka-config opts)]
     (start opts kafka-opts)))
