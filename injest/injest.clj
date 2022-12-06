@@ -1,7 +1,6 @@
 (ns injest
   "Mistakenly ingest stuff."
-  (:require [clojure.data.json  :as json]
-            [clojure.java.io    :as io]
+  (:require [clojure.java.io    :as io]
             [clojure.pprint     :refer [pprint]]
             [clojure.spec.alpha :as s]
             [clojure.string     :as str]
@@ -51,20 +50,10 @@
   (-> "./clinvar_releases_pre_20221027.tsv"
       tabulate mapulate))
 
-(defn parse-json
-  "Parse STREAM as JSON or print it."
-  [stream]
-  (try (json/read stream :key-fn keyword)
-       (catch Throwable x
-         (pprint {:exception x :stream (slurp stream)})
-         stream)))
-
 (defn fetch
   "Fetch STUFF from FTP-SITE."
   [& stuff]
   (-> {:as      :text
-       :headers {"Accept:"      "application/json"
-                 "Content-type" "application/json"}
        :method  :get
        :url     (str/join "/" (into [ftp-site] stuff))}
       http/request deref :body html/parse html/as-hickory))
