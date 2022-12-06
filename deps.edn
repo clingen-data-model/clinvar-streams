@@ -1,0 +1,56 @@
+;; This does not work yet.
+;;
+;; tbl@wmf05-d86 ~/ClinVar/clinvar-streams # clj -Stree
+;; Error building classpath. Could not find artifact io.confluent:kafka-schema-registry-client:jar:5.3.1 in central (https://repo1.maven.org/maven2)
+;; tbl@wmf05-d86 ~/ClinVar/clinvar-streams 1#
+;;
+{:description "ClinVar data streams for ClinGen ecosystem applications"
+ :url         "https://github.com/clingen-data-model/clinvar-streams"
+ :license     {:name "EPL-2.0 OR GPL-2.0-or-later WITH Classpath-exception-2.0"
+               :url "https://www.eclipse.org/legal/epl-2.0/"}
+ :mvn/repos
+ {"central"   {:url "https://repo1.maven.org/maven2"}
+  "clojars"   {:url "https://clojars.org/repo"}}
+ :deps
+ {org.clojure/clojure                   {:mvn/version "1.11.1"}
+  org.clojure/core.async                {:mvn/version "1.6.673"}
+  org.clojure/data.csv                  {:mvn/version "1.0.1"}
+  org.clojure/data.json                 {:mvn/version "2.4.0"}
+  org.clojure/java.jdbc                 {:mvn/version "0.7.12"}
+  org.clojure/tools.cli                 {:mvn/version "1.0.214"}
+  org.clojure/tools.namespace           {:mvn/version "1.3.0"}
+  c3p0/c3p0                             {:mvn/version "0.9.1.2"}
+  cheshire/cheshire                     {:mvn/version "5.11.0"}
+  cli-matic/cli-matic                   {:mvn/version "0.5.4"}
+  clj-commons/fs                        {:mvn/version "1.6.310"}
+  com.google.cloud/google-cloud-storage {:mvn/version "2.15.1"}
+  com.taoensso/encore                   {:mvn/version "3.42.0"}
+  com.taoensso/nippy                    {:mvn/version "3.2.0"}
+  com.taoensso/timbre                   {:mvn/version "6.0.3"}
+  digest/digest                         {:mvn/version "1.4.10"}
+  fundingcircle/jackdaw                 {:mvn/version "0.7.4"}
+  http-kit/http-kit                     {:mvn/version "2.6.0"}
+  io.pedestal/pedestal.jetty            {:mvn/version "0.5.8"}
+  io.pedestal/pedestal.route            {:mvn/version "0.5.8"}
+  io.pedestal/pedestal.service          {:mvn/version "0.5.8"}
+  mount/mount                           {:mvn/version "0.1.16"}
+  nrepl/nrepl                           {:mvn/version "1.0.0"}
+  org.postgresql/postgresql             {:mvn/version "42.5.1"}
+  org.slf4j/slf4j-simple                {:mvn/version "2.0.5"}
+  org.xerial/sqlite-jdbc                {:mvn/version "3.40.0.0"}}
+ :paths ["src"]
+ :aliases
+ {:test
+  {:extra-paths ["test"]
+   :extra-deps {org.clojure/test.check {:mvn/version "RELEASE"}}}
+  :runner
+  {:extra-deps
+   {com.cognitect/test-runner
+    {:git/url "https://github.com/cognitect-labs/test-runner"
+     :git/sha "76568540e7f40268ad2b646110f237a60295fa3c"}}
+   :main-opts ["-m" "cognitect.test-runner" "-d" "test"]}
+  :run
+  {:jvm-opts ["-Xms256m" "-XX:MaxRAMPercentage=50"]
+   :main-opts ["-m" "clinvar-streams.core"]}
+  :testdata
+  {:main-opts ["-m" "clinvar-raw.generate-local-topic"]}}}
