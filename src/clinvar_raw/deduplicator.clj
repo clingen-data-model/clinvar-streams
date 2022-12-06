@@ -22,17 +22,19 @@
        (jc/send! producer)))
 
 (defn -main [& args]
-  (let [opts (config/app-config)
-        kafka-opts (-> (config/kafka-config opts)
+  (let [kafka-opts (-> (config/kafka-config config/env-config)
                        (assoc "max.poll.records" "1000"))
-        output-topic (:kafka-producer-topic opts)
+        output-topic (:DX_CV_RAW_OUTPUT_TOPIC config/env-config)
         running? (atom true)
         input-counter (atom 0)
-        output-counter (atom 0)]
+        output-counter (atom 0)
+        _ (rocksdb/close (rocksdb/open "deduplicator.db"))
+        _ (rocksdb/rocks-destroy! "deduplicator.db")
+        db (rocksdb/open "deduplicator.db")]
     (with-open [consumer (jc/consumer kafka-opts)
                 producer (jc/producer kafka-opts)]
-      (jc/subscribe consumer [{:topic-name (:kafka-consumer-topic opts)}])
-      (when (:kafka-reset-consumer-offset opts)
+      (jc/subscribe consumer [{:topic-name (:DX_CV_RAW_INPUT_TOPIC config/env-config)}])
+      (when (:KAFKA_RESET_CONSUMER_OFFSET config/env-config)
         (log/info "Resetting to start of input topic")
         (jc/seek-to-beginning-eager consumer))
       (while @running?
@@ -41,7 +43,7 @@
             (swap! input-counter #(+ % (count batch)))
             (let [deduplicated-batch (filter
                                       ;; TODO store-new
-                                      #(not (ingest/duplicate? %))
+                                      #(not (ingest/duplicate? db %))
                                       batch)]
               (swap! output-counter #(+ % (count deduplicated-batch)))
               (doseq [m deduplicated-batch]

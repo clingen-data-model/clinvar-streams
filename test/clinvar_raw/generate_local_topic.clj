@@ -8,22 +8,14 @@ Usage from REPL:
 (-main {:root-dir \"test/clinvar_raw/testset\"})
 "
 (ns clinvar-raw.generate-local-topic
-  (:require [clinvar-raw.core :as raw-core]
-            [clinvar-raw.stream :as stream]
-            [clinvar-raw.config :as raw-config]
+  (:require [clinvar-raw.stream :as stream]
+            [clinvar-raw.config :as config]
             [clojure.java.io :as io]
             [clojure.string :as s]
             [clojure.core.async :as async]
             [cheshire.core :as json]
             [jackdaw.client :as jc]
-            [jackdaw.data :as jd]
-            [taoensso.timbre :as log]
-            [clinvar-raw.config :as cfg])
-  (:import (java.io File)
-           (java.text SimpleDateFormat)
-           (java.util TimeZone)
-           (java.time Duration))
-  (:gen-class))
+            [taoensso.timbre :as log]))
 
 
 (defn is-dir?
@@ -139,14 +131,13 @@ Usage from REPL:
     ;; Save drop messages and upload them to the drop message topic
     (save-to-topic-file jackdaw-messages (str dsp-topic ".topic"))
 
-    (let [opts (cfg/app-config)
-          output-topic (:kafka-producer-topic opts)
-          kafka-producer-config (-> opts cfg/kafka-config)
+    (let [output-topic (:kafka-producer-topic config/env-config)
+          kafka-producer-config (-> config/env-config config/kafka-config)
           producer (jc/producer kafka-producer-config)]
       (letfn [(process-local-drop-message
                 [message]
                 (log/info {:fn :process-local-drop-message :message message})
-                (let [output-messages (stream/process-clinvar-drop-refactor
+                (let [output-messages (stream/process-clinvar-drop
                                        message
                                        {:storage-protocol "file://"})]
                   ;; Realize whole lazy seq into memory

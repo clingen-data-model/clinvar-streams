@@ -54,7 +54,7 @@
   "Sends a message to the producer on `topic`, with the message key `key`, and payload `value`
   `value` can be a string or json-serializable object like a map"
   [producer topic {:keys [key value]}]
-  (log/tracef "Sending message with key %s to topic %s" key topic)
+  (log/debug "Sending message with key %s to topic %s" key topic)
   (jc/send! producer (jd/->ProducerRecord {:topic-name topic}
                                           key
                                           (if (string? value) value (json/generate-string value))))
@@ -252,6 +252,9 @@
   "Takes a diff notification message, and returns a lazy seq of
    all the output messages in order for this diffed release."
   [parsed-diff-files-msg storage-protocol]
+  (log/debug :fn :generate-messages-from-diff
+             :parsed-diff-files-message parsed-diff-files-msg
+             :storage-protocol storage-protocol)
   (let [release-date (:release_date parsed-diff-files-msg)]
     (letfn [(process-file [{:keys [bucket path order-entry event-type]}]
               (let [reader-fn (partial construct-reader
@@ -358,15 +361,15 @@
   (update-in m ks #(json/generate-string %)))
 
 (defn start [opts kafka-opts]
-  (let [output-topic (:kafka-producer-topic opts)]
+  (let [output-topic (:DX_CV_RAW_OUTPUT_TOPIC opts)
+        max-input-count (:DX_CV_RAW_MAX_INPUT_COUNT opts)]
     (with-open [producer (jc/producer kafka-opts)
-                consumer (jc/consumer kafka-opts)
-                max-input-count (:DX_CV_RAW_MAX_INPUT_COUNT opts)]
-      (jc/subscribe consumer [{:topic-name (:kafka-consumer-topic opts)}])
-      (when (:kafka-reset-consumer-offset opts)
+                consumer (jc/consumer kafka-opts)]
+      (jc/subscribe consumer [{:topic-name (:DX_CV_RAW_INPUT_TOPIC opts)}])
+      (when (:KAFKA_RESET_CONSUMER_OFFSET opts)
         (log/info "Resetting to start of input topic")
         (jc/seek-to-beginning-eager consumer))
-      (log/info "Subscribed to consumer topic " (:kafka-consumer-topic opts))
+      (log/info "Subscribed to consumer topic " (:DX_CV_RAW_INPUT_TOPIC opts))
       (doseq [m (cond->> (consumer-lazy-seq-infinite consumer)
                   max-input-count (take max-input-count))
               :while @listening-for-drop]
@@ -377,7 +380,7 @@
               output-type-counters (atom {})]
           (doseq [filtered-message
                   (->> (process-clinvar-drop m-value
-                                             (select-keys opts [:storage-protocol]))
+                                             (select-keys opts [:STORAGE_PROTOCOL]))
                        ;; process-clinvar-drop returns [{:key ... :value ...}]
                        (map #(json-parse-key-in % [:value :content :content]))
 
@@ -429,10 +432,10 @@
 
 (defn repl-test []
   (reset-db)
-  (let [opts (-> (config/app-config)
-                 (assoc :kafka-consumer-topic "broad-dsp-clinvar")
-                 (assoc :kafka-producer-topic "clinvar-raw-dedup")
-                 (assoc :kafka-reset-consumer-offset true))
+  (let [opts (-> config/env-config
+                 (assoc :DX_CV_RAW_INPUT_TOPIC "broad-dsp-clinvar")
+                 (assoc :DX_CV_RAW_OUTPUT_TOPIC "clinvar-raw-dedup")
+                 (assoc :KAFKA_RESET_CONSUMER_OFFSET true))
         kafka-config (-> (config/kafka-config opts)
                          (assoc  "group.id" "local-dev"))]
     (start opts kafka-config)))
@@ -453,6 +456,6 @@
 
 
 (defn start-with-env []
-  (let [opts (config/app-config)
+  (let [opts config/env-config
         kafka-opts (config/kafka-config opts)]
     (start opts kafka-opts)))

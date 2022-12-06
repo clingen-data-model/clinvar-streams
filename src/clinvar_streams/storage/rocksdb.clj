@@ -3,17 +3,16 @@
 
 (ns clinvar-streams.storage.rocksdb
   (:require [taoensso.nippy :as nippy :refer [fast-freeze fast-thaw]]
-            [clinvar-streams.config :refer [app-config]]
             [clojure.java.io :as io]
-            [digest])
+            [digest]
+            [clinvar-streams.config :as config])
   (:import (org.rocksdb RocksDB Options ReadOptions Slice RocksIterator)
-           java.security.MessageDigest
            java.util.Arrays))
 
 
 (defn create-db-path [db-name]
-  (let [data-dir (:data-directory (app-config))]
-    (assert (not (nil? data-dir)) "Config :data-directory cannot be nil")
+  (let [data-dir (:CLINVAR_STREAMS_DATA_DIR config/env-config)]
+    (assert (not (nil? data-dir)) "Config :CLINVAR_STREAMS_DATA_DIR cannot be nil")
     (str data-dir "/" db-name)))
 
 (defn open [db-name]

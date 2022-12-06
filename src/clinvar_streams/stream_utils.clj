@@ -1,47 +1,39 @@
 (ns clinvar-streams.stream-utils
   (:require [clinvar-streams.util :as util]
             [clinvar-streams.config :as config]
-            [clinvar-streams.storage.database-sqlite.sink :as sink]
-            [clinvar-streams.storage.database-sqlite.client :as db-client]
-            [jackdaw.serdes :as j-serde]
             [cheshire.core :as json]
             [taoensso.timbre :as log]
             [clojure.java.io :as io]
-            [clojure.string :as s]
-            [clojure.java.jdbc :as jdbc]
             [jackdaw.client :as jc]
             [jackdaw.data :as jd])
-  (:import [org.apache.kafka.streams KafkaStreams]
-           [java.util Properties]
-           [java.time Duration]
+  (:import [java.time Duration]
            [org.apache.kafka.common TopicPartition]
-           [java.util UUID Date])
-  (:gen-class))
+           [java.util UUID]))
 
 
 (defn app-config []
-  {:kafka-host "pkc-4yyd6.us-east1.gcp.confluent.cloud:9092"
-   :kafka-user (util/get-env-required "KAFKA_USER")
-   :kafka-password (util/get-env-required "KAFKA_PASSWORD")
-   :kafka-group (util/get-env-required "KAFKA_GROUP")})
+  {:KAFKA_HOST "pkc-4yyd6.us-east1.gcp.confluent.cloud:9092"
+   :KAFKA_USER (util/get-env-required "KAFKA_USER")
+   :KAFKA_PASSWORD (util/get-env-required "KAFKA_PASSWORD")
+   :KAFKA_GROUP (util/get-env-required "KAFKA_GROUP")})
 
 
 
 
 (defn get-max-offset [topic-name partition-num]
-  (with-open [consumer (jc/consumer (config/kafka-config (assoc (app-config) :kafka-group (.toString (UUID/randomUUID)))))]
+  (with-open [consumer (jc/consumer (config/kafka-config (assoc (app-config) :KAFKA_GROUP (.toString (UUID/randomUUID)))))]
     (jc/subscribe consumer [{:topic-name topic-name}])
     (jc/seek-to-end-eager consumer)
     (jc/position consumer (TopicPartition. topic-name partition-num))))
 
 (defn get-min-offset [topic-name partition-num]
-  (with-open [consumer (jc/consumer (config/kafka-config (assoc (app-config) :kafka-group (.toString (UUID/randomUUID)))))]
+  (with-open [consumer (jc/consumer (config/kafka-config (assoc (app-config) :KAFKA_GROUP (.toString (UUID/randomUUID)))))]
     (jc/subscribe consumer [{:topic-name topic-name}])
     (jc/seek-to-beginning-eager consumer)
     (jc/position consumer (TopicPartition. topic-name partition-num))))
 
 (defn get-all-messages [topic-name partition-num]
-  (let [consumer (jc/consumer (config/kafka-config (assoc (app-config) :kafka-group (.toString (UUID/randomUUID)))))]
+  (let [consumer (jc/consumer (config/kafka-config (assoc (app-config) :KAFKA_GROUP (.toString (UUID/randomUUID)))))]
     (jc/subscribe consumer [{:topic-name topic-name}])
     (jc/seek-to-beginning-eager consumer)
     (let [min-offset (get-min-offset topic-name partition-num)
@@ -57,10 +49,6 @@
             (let [batch (jc/poll consumer (Duration/ofMillis 1000))]
               (recur (concat msgs batch)
                      (+ c (count batch))))))))))
-; TODO
-(defn topic-exists? [topic-name]
-  "TODO"
-  (let [consumer ()]))
 
 (defn -download-topic-kv
   "Downloads messages from topic and saves them newline delimited in file-name.
@@ -70,7 +58,7 @@
   (let [download-writer (io/writer file-name)
         running (atom true)
         max-offset (get-max-offset topic-name 0)]
-    (with-open [consumer (jc/consumer (config/kafka-config (config/app-config)))]
+    (with-open [consumer (jc/consumer (config/kafka-config config/env-config))]
       ;(jc/subscribe consumer [{:topic-name topic-name}])
       (jc/assign-all consumer [topic-name])
       (jc/seek-to-beginning-eager consumer)
@@ -92,7 +80,7 @@
     (log/info "Reading file" file-name)
     (with-open [file-rdr (io/reader file-name)
                 ;consumer (jc/consumer (config/kafka-config config/app-config))
-                producer (jc/producer (config/kafka-config (config/app-config)))]
+                producer (jc/producer (config/kafka-config config/env-config))]
       (let [file-lines (line-seq file-rdr)]
         (doseq [line file-lines]
           (let [j (json/parse-string line true)
