@@ -10,7 +10,9 @@
                :url "https://www.eclipse.org/legal/epl-2.0/"}
  :mvn/repos
  {"central"   {:url "https://repo1.maven.org/maven2"}
-  "clojars"   {:url "https://clojars.org/repo"}}
+  "clojars"   {:url "https://clojars.org/repo"}
+  "confluent" {:url "https://packages.confluent.io/maven"}
+  "mulesoft"  {:url "https://repository.mulesoft.org/nexus/content/repositories/public"}}
  :deps
  {org.clojure/clojure                   {:mvn/version "1.11.1"}
   org.clojure/core.async                {:mvn/version "1.6.673"}
