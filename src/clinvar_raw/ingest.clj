@@ -3,10 +3,10 @@
   (:require [clinvar-streams.storage.rocksdb :as rocksdb]
             [clinvar-streams.util :refer [select-keys-nested]]
             [clojure.data.json :as json]
+            [clojure.walk :refer [postwalk]]
             [clojure.zip       :as zip]
-            [mount.core :refer [defstate]]
             [digest]
-            [taoensso.nippy :as nippy]))
+            [taoensso.timbre :as log]))
 
 ;; Messages are encoded as JSON which lacks sets.  Data that are
 ;; semantically unordered are encoded as JSON arrays, which forces
@@ -50,6 +50,27 @@
                         (if (vector? v) (zip/replace loc [k (set v)]) loc))
                       loc))))))))
 
+(defn disorder-pw
+  "Return EDN with any vector fields converted to sets."
+  [edn]
+  (letfn [(entry? [node] (isa? (type node) clojure.lang.MapEntry))
+          (f [node]
+            (if (and (vector? node) (not (entry? node)))
+              (set node)
+              node))]
+    (postwalk f edn)))
+
+(defn disorder-recur
+  [edn]
+  (persistent!
+   (cond
+     (vector? edn) (set (mapv disorder-recur (transient edn)))
+    ;;(map? edn) (into {} (map (fn [[k v]] [k (disorder v)]) edn))
+
+     (map? edn) (apply (partial assoc edn)
+                       (apply concat (for [[k v] edn] [k (disorder v)])))
+     :else edn)))
+
 (defn differ?
   "Nil when NOW equals WAS after DISORDERing their vectors into sets.
   Otherwise a hash of the DISORDERed NOW."
@@ -59,36 +80,34 @@
     (when-not (= now-edn was-edn)
       (hash now-edn))))
 
-(defstate dedup-db
-  :start (rocksdb/open "clinvar-raw-dedup.db")
-  :stop (rocksdb/close dedup-db))
-
-(defn clinvar-concept-identity [message]
-  (let [entity-type (-> message :content :entity_type)]
-    (case entity-type
-      :trait_mapping (select-keys-nested message [[:content :entity_type]
-                                                  [:content :clinical_assertion_id]
-                                                  [:content :medgen_id]])
-      :gene_association (select-keys-nested message [[:content :entity_type]
-                                                     [:content :gene_id]
-                                                     [:content :variation_id]])
-      (select-keys-nested message [[:content :entity_type]
-                                   [:content :id]]))))
-
-;; (defn clinvar-message-without-meta
-;;   "Drops the fields in the wrapper around :content.
-;;    Ex: :release_date, :event_type "
-;;   [message]
-;;   {:content (:content message)})
+(defn clinvar-concept-identity
+  ;; TODO SPEC, for real
+  [message]
+  (let [entity-type (-> message :content :entity_type)
+        id (case entity-type
+             "trait_mapping" (select-keys-nested message [[:content :entity_type]
+                                                          [:content :clinical_assertion_id]
+                                                          [:content :mapping_value]
+                                                          [:content :mapping_type]
+                                                          [:content :mapping_ref]])
+             "gene_association" (select-keys-nested message [[:content :entity_type]
+                                                             [:content :gene_id]
+                                                             [:content :variation_id]])
+             (select-keys-nested message [[:content :entity_type]
+                                          [:content :id]]))]
+    (when (empty? id) (log/error :fn :duplicate? :msg "Key was empty" :id id :message message))
+    id))
 
 (defn store-new!
   "Takes edn M, stores its hash in the dedup database.
    Stored as ^Integer (hash m) -> ^String (-> m digest/md5)
    rocks-put calls nippy/freeze on the value. Could add a put-raw-value."
-  [m]
+  ;; TODO SPEC
+  [db m]
   (let [k (clinvar-concept-identity m)
         v (-> m (dissoc :release_date) disorder)]
-    (rocksdb/rocks-put! dedup-db k v)))
+    (log/debug :fn :store-new! :k k)
+    (rocksdb/rocks-put! db k v)))
 
 (defn duplicate?
   "Takes a map M, returns truthy (not nil/false) if has been seen before.
@@ -98,17 +117,20 @@
    previous was a create and the current is an update, returns :create-to-update.
    Caller may want to use this to persist the update.
    TODO change keys to sorted vecs and hash"
-  [current-m #_{:keys [persist-create-update-dup?]
-                :or {persist-create-update-dup? true}}]
+  ;; TODO SPEC
+  [db current-m #_{:keys [persist-create-update-dup?]
+                   :or {persist-create-update-dup? true}}]
   (let [k (clinvar-concept-identity current-m)
         current-v (-> current-m (dissoc :release_date) disorder)
-        previous-v (rocksdb/rocks-get dedup-db k)]
+        previous-v (rocksdb/rocks-get db k)]
+    (log/debug :fn :duplicate? :k k :current current-v :previous previous-v)
     ;; Compare the messages (without :release_date)
     ;; If they are different but the only difference is that
     ;; the previous was a :create and the current is an :update,
     ;; treat this as a duplicate.
     (or (= previous-v current-v)
-        (when (and (= :create (:event_type previous-v))
-                   (= :update (:event_type current-v))
-                   (= (:content previous-v) (:content current-v)))
-          :create-to-update))))
+        (if (and (= :create (:event_type previous-v))
+                 (= :update (:event_type current-v))
+                 (= (:content previous-v) (:content current-v)))
+          :create-to-update ;; truthy
+          false))))

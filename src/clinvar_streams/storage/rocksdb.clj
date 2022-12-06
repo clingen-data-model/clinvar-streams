@@ -2,18 +2,17 @@
 ;; https://github.com/clingen-data-model/genegraph/blob/9e332f5ef78b4920aaf31cb2ee977816a0dd186f/src/genegraph/rocksdb.clj
 
 (ns clinvar-streams.storage.rocksdb
-  (:require [taoensso.nippy :as nippy :refer [freeze thaw]]
-            [clinvar-streams.config :refer [app-config]]
+  (:require [taoensso.nippy :as nippy :refer [fast-freeze fast-thaw]]
             [clojure.java.io :as io]
-            [digest])
+            [digest]
+            [clinvar-streams.config :as config])
   (:import (org.rocksdb RocksDB Options ReadOptions Slice RocksIterator)
-           java.security.MessageDigest
            java.util.Arrays))
 
 
 (defn create-db-path [db-name]
-  (let [data-dir (:data-directory (app-config))]
-    (assert (not (nil? data-dir)) "Config :data-directory cannot be nil")
+  (let [data-dir (:CLINVAR_STREAMS_DATA_DIR config/env-config)]
+    (assert (not (nil? data-dir)) "Config :CLINVAR_STREAMS_DATA_DIR cannot be nil")
     (str data-dir "/" db-name)))
 
 (defn open [db-name]
@@ -24,8 +23,9 @@
     (io/make-parents full-path)
     (RocksDB/open opts full-path)))
 
+
 (defn- key-digest [k]
-  (-> k freeze digest/md5 .getBytes))
+  (-> k fast-freeze digest/md5 .getBytes))
 
 (defn- range-upper-bound
   "Return the key defining the (exclusive) upper bound of a scan,
@@ -37,10 +37,10 @@
 
 (defn- key-tail-digest
   [k]
-  (-> k freeze digest/md5 .getBytes range-upper-bound))
+  (-> k fast-freeze digest/md5 .getBytes range-upper-bound))
 
 (defn- multipart-key-digest [ks]
-  (->> ks (map #(-> % freeze digest/md5)) (apply str) .getBytes))
+  (->> ks (map #(-> % fast-freeze digest/md5)) (apply str) .getBytes))
 
 (defn rocks-put!
   "Put v in db with key k. Key will be frozen with md5 hash.
@@ -48,28 +48,28 @@
    but breaks any expectation of ordering. Value will be frozen,
    supports arbitrary Clojure data."
   [db k v]
-  (.put db (key-digest k) (freeze v)))
+  (.put db (key-digest k) (fast-freeze v)))
 
 (defn rocks-put-raw-key!
   "Put v in db with key k. Key will be used without freezing and must be
    a Java byte array. Intended to support use cases where the user must
    be able to define the ordering of data. Value will be frozen."
   [db k v]
-  (.put db k (freeze v)))
+  (.put db k (fast-freeze v)))
 
 (defn rocks-get-raw-key!
   "Retrieve data that has been stored with a byte array defined key. K must be a
   Java byte array."
   [db k]
   (if-let [result (.get db (key-digest k))]
-    (thaw result)
+    (fast-thaw result)
     ::miss))
 
 (defn rocks-put-multipart-key!
   "ks is a sequence, will hash each element in ks independently to support
    range scans based on different elements of the key"
   [db ks v]
-  (.put db (multipart-key-digest ks) (freeze v)))
+  (.put db (multipart-key-digest ks) (fast-freeze v)))
 
 (defn rocks-delete! [db k]
   (.delete db (key-digest k)))
@@ -83,18 +83,18 @@
   (RocksDB/destroyDB (create-db-path db-name) (Options.)))
 
 (defn rocks-get
-  "Get and thaw element with key k. Key may be any arbitrary Clojure datatype"
+  "Get and fast-thaw element with key k. Key may be any arbitrary Clojure datatype"
   [db k]
   (if-let [result (.get db (key-digest k))]
-    (thaw result)
+    (fast-thaw result)
     ::miss))
 
 (defn rocks-get-multipart-key
-  "Get and thaw element with key sequence ks. ks is a sequence of
+  "Get and fast-thaw element with key sequence ks. ks is a sequence of
   arbitrary Clojure datatypes."
   [db ks]
   (if-let [result (.get db (multipart-key-digest ks))]
-    (thaw result)
+    (fast-thaw result)
     ::miss))
 
 (defn rocks-delete-with-prefix!
@@ -128,7 +128,7 @@
 (defn rocks-iterator-seq [iter]
   (lazy-seq
    (if (.isValid iter)
-     (let [v (thaw (.value iter))]
+     (let [v (fast-thaw (.value iter))]
        (.next iter)
        (cons v
              (rocks-iterator-seq iter)))
@@ -158,7 +158,7 @@
     (loop [i 0
            ret (transient [])]
       (if (and (< i n) (.isValid iter))
-        (let [new-ret (conj! ret (-> iter .value thaw))]
+        (let [new-ret (conj! ret (-> iter .value fast-thaw))]
           (.next iter)
           (recur (inc i) new-ret))
         (do

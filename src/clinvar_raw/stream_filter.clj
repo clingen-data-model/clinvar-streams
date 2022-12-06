@@ -1,9 +1,7 @@
 (ns clinvar-raw.stream-filter
   (:require [cheshire.core :as json]
-            [clinvar-raw.config :as cfg]
-            [clinvar-streams.util :refer [select-keys-nested
-                                          gzip-file-reader
-                                          gzip-file-writer]]
+            [clinvar-raw.config :as config]
+            [clinvar-streams.util :as util]
             [clojure.java.io :as io]
             [jackdaw.client :as jc]
             [taoensso.timbre :as log])
@@ -34,19 +32,21 @@
 
 
 (defn topic-download-gzip []
-  (let [app-config (assoc (cfg/app-config)
-                          :kafka-consumer-topic "clinvar-raw-dedup")
-        kafka-opts (-> (cfg/kafka-config app-config)
-                       (assoc "max.poll.records" "10000"))
+  (let [app-config (assoc config/env-config
+                          :DX_CV_RAW_INPUT_TOPIC "clinvar-raw-dedup")
+        kafka-opts (-> (config/kafka-config app-config)
+                       (assoc "max.poll.records" "10000")
+                       ;; 10MiB fetch
+                       (assoc "max.partition.fetch.bytes" (int (* 10 1024 1024))))
         looping? (atom true)
-        output-filename (str (:kafka-consumer-topic app-config) ".gz")
-        max-empty-batches 10
+        output-filename (str (:DX_CV_RAW_INPUT_TOPIC app-config) ".gz")
+        max-empty-batches 5
         empty-batch-count (atom 0)]
     (with-open [consumer (jc/consumer kafka-opts)]
-      (jc/subscribe consumer [{:topic-name (:kafka-consumer-topic app-config)}])
+      (jc/subscribe consumer [{:topic-name (:DX_CV_RAW_INPUT_TOPIC app-config)}])
       (jc/poll consumer 0)
       (jc/seek-to-beginning-eager consumer)
-      (with-open [writer (gzip-file-writer output-filename)]
+      (with-open [writer (util/gzip-file-writer output-filename)]
         (while @looping?
           (let [batch (jc/poll consumer (Duration/ofSeconds 10))]
             (log/infof "Read %s records. First record offset: %s, date: %s"
@@ -54,9 +54,9 @@
                        (-> batch first :offset)
                        (-> batch first :value
                            (json/parse-string true)
-                           (select-keys-nested [:release_date
-                                                :event_type
-                                                [:content :entity_type]])
+                           (util/select-keys-nested [:release_date
+                                                     :event_type
+                                                     [:content :entity_type]])
                            json/generate-string))
             (if (empty? batch)
               (if (<= max-empty-batches @empty-batch-count)
@@ -70,22 +70,21 @@
                     (dorun (map #(do (.write writer %)
                                      (.write writer "\n"))
                                 (->> batch
-                                     ;;(map #(select-keys % [:offset :value]))
+                                     #_(map #(select-keys % [:offset :value]))
                                      (map :value)
-                                     (map json/generate-string)))))))))))))
+                                     #_(map json/generate-string)))))))))))))
 
 (defn -main [& args]
-  (let [app-config (cfg/app-config)
-        kafka-opts (-> (cfg/kafka-config app-config)
+  (let [kafka-opts (-> (config/kafka-config config/env-config)
                        (assoc "max.poll.records" "1000"))
         looping? (atom true)
-        output-filename (str (:kafka-consumer-topic app-config) "-filtered.txt")
+        output-filename (str (:DX_CV_RAW_INPUT_TOPIC config/env-config) "-filtered.txt")
         variation-ids (-> "vcepvars-220801.txt" io/reader line-seq set)
         entity-types-include-all (set ["trait" "trait_set" "submitter"])
         max-empty-batches 10
         empty-batch-count (atom 0)]
     (with-open [consumer (jc/consumer kafka-opts)]
-      (jc/subscribe consumer [{:topic-name (:kafka-consumer-topic app-config)}])
+      (jc/subscribe consumer [{:topic-name (:DX_CV_RAW_INPUT_TOPIC config/env-config)}])
       (jc/poll consumer 0)
       (jc/seek-to-beginning-eager consumer)
       (with-open [writer (io/writer output-filename)]
@@ -96,9 +95,9 @@
                        (-> batch first :offset)
                        (-> batch first :value
                            (json/parse-string true)
-                           (select-keys-nested [:release_date
-                                                :event_type
-                                                [:content :entity_type]])
+                           (util/select-keys-nested [:release_date
+                                                     :event_type
+                                                     [:content :entity_type]])
                            json/generate-string))
             (if (empty? batch)
               (if (<= max-empty-batches @empty-batch-count)
@@ -126,7 +125,7 @@
 
         variation-ids (-> "vcepvars-220801.txt" io/reader line-seq set)
         entity-types-include-all (set ["trait" "trait_set" "submitter"])]
-    (with-open [reader (gzip-file-reader input-filename)
+    (with-open [reader (util/gzip-file-reader input-filename)
                 writer (io/writer output-filename)]
       (doseq [line (-> reader
                        line-seq

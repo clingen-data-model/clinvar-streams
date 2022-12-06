@@ -1,44 +1,29 @@
 (ns clinvar-raw.config
-  (:require [clinvar-streams.util :as util]
-            [taoensso.timbre :as timbre])
-  (:import java.lang.System))
+  (:require [clojure.walk :as walk]
+            [taoensso.timbre :as timbre]
+            [clinvar-streams.config :as streams-config]))
 
 (timbre/set-level! :info)
 
-(defn remove-nil-values [m]
-  (into {} (filter #(not= nil (second %)) m)))
+(def env-config
+  (merge streams-config/env-config
+         (-> (System/getenv)
+             (select-keys
+              (map name [:DX_CV_RAW_INPUT_TOPIC
+                         :DX_CV_RAW_OUTPUT_TOPIC
+                         :DX_CV_RAW_MAX_INPUT_COUNT]))
+             walk/keywordize-keys)))
 
-(defn app-config []
-  {:kafka-host (or (System/getenv "KAFKA_BROKER")
-                   "pkc-4yyd6.us-east1.gcp.confluent.cloud:9092")
-   :kafka-user (util/get-env-required "KAFKA_USER")
-   :kafka-password (util/get-env-required "KAFKA_PASSWORD")
-   :kafka-group (System/getenv "KAFKA_GROUP")
-   :kafka-consumer-topic (util/get-env-required "DX_CV_RAW_INPUT_TOPIC")
-   :kafka-producer-topic (System/getenv "DX_CV_RAW_OUTPUT_TOPIC")
-   :kafka-reset-consumer-offset (Boolean/valueOf (System/getenv "KAFKA_RESET_CONSUMER_OFFSET"))})
+(def appender
+  "File appender for timbre."
+  (timbre/spit-appender
+   {:fname (str (:CLINVAR_STREAMS_DATA_DIR env-config)
+                "logs/clinvar-streams.log")}))
+
+(timbre/swap-config!
+ #(update % :appenders merge {:file appender}))
 
 (defn kafka-config
-  "Expects :kafka-user, :kafka-password, :kafka-host, :kafka-group in opts."
-  [opts]
-  (remove-nil-values
-   {"ssl.endpoint.identification.algorithm" "https"
-    "compression.type" "gzip"
-    "sasl.mechanism" "PLAIN"
-    "request.timeout.ms" "20000"
-    "bootstrap.servers" (:kafka-host opts)
-    "retry.backoff.ms" "500"
-    "security.protocol" "SASL_SSL"
-    "key.serializer" "org.apache.kafka.common.serialization.StringSerializer"
-    "value.serializer" "org.apache.kafka.common.serialization.StringSerializer"
-    "key.deserializer" "org.apache.kafka.common.serialization.StringDeserializer"
-    "value.deserializer" "org.apache.kafka.common.serialization.StringDeserializer"
-    "group.id" (:kafka-group opts)
-    ;; 12 hours in milliseconds
-    "max.poll.interval.ms" "43200000"
-    ;; Poll one record at a time. Ensures more timely offset commits.
-    "max.poll.records" "1"
-    "sasl.jaas.config" (str "org.apache.kafka.common.security.plain.PlainLoginModule required username=\""
-                            (:kafka-user opts) "\" password=\"" (:kafka-password opts) "\";")}))
-
-(def date-format "YYYY-MM-DD'T'HH:mm:ss:Z")
+  "Uses :KAFKA_USER :KAFKA_PASSWORD, :KAFKA_HOST :KAFKA_GROUP in opts."
+  [{:keys [KAFKA_GROUP KAFKA_BROKER KAFKA_PASSWORD KAFKA_USER] :as opts}]
+  (streams-config/kafka-config opts))

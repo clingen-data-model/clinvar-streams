@@ -13,10 +13,15 @@ pom.xml.asc
 .idea/
 .calva/
 .vscode/
+.lsp/
 
+/venv
 /*.topic
 /*.gz
 /*.zip
 /*.sqlite3
+/*.txt
+/*.json
 testdata_*/
 scratch/
+/data*/
