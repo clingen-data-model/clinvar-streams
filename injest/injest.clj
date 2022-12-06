@@ -4,7 +4,18 @@
             [clojure.java.io    :as io]
             [clojure.pprint     :refer [pprint]]
             [clojure.spec.alpha :as s]
-            [clojure.string     :as str]))
+            [clojure.string     :as str]
+            [hickory.core       :as html]
+            [hickory.select     :as css]
+            [org.httpkit.client :as http]))
+
+(defmacro dump
+  "Dump [EXPRESSION VALUE] where VALUE is EXPRESSION's value."
+  [expression]
+  `(let [x# ~expression]
+     (do
+       (pprint ['~expression x#])
+       x#)))
 
 (s/def ::table
   (s/and sequential?
@@ -39,3 +50,25 @@
   []
   (-> "./clinvar_releases_pre_20221027.tsv"
       tabulate mapulate))
+
+(defn parse-json
+  "Parse STREAM as JSON or print it."
+  [stream]
+  (try (json/read stream :key-fn keyword)
+       (catch Throwable x
+         (pprint {:exception x :stream (slurp stream)})
+         stream)))
+
+(defn fetch
+  "Fetch STUFF from FTP-SITE."
+  [& stuff]
+  (-> {:as      :text
+       :headers {"Accept:"      "application/json"
+                 "Content-type" "application/json"}
+       :method  :get
+       :url     (str/join "/" (into [ftp-site] stuff))}
+      http/request deref :body html/parse html/as-hickory))
+
+(comment
+  (fetch "pub" "clinvar" "xml" "clinvar_variation" "weekly_release")
+  "tbl")

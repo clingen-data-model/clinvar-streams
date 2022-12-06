@@ -32,8 +32,8 @@
                  [io.pedestal/pedestal.service "0.5.7"]
                  [mount "0.1.16"]
                  [nrepl "0.8.3"]
-                 [org.clojure/tools.namespace "1.1.0"]
-                 [org.postgresql/postgresql "42.2.16"]
+                 [org.clj-commons/hickory "0.7.3"]
+                 [org.slf4j/slf4j-simple "1.7.28"]
                  [org.xerial/sqlite-jdbc "3.32.3.2"]]
   :repl-options {:init-ns clinvar-raw.stream
                  :caught clojure.repl/pst

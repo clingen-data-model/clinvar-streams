@@ -35,6 +35,7 @@
   io.pedestal/pedestal.service          {:mvn/version "0.5.8"}
   mount/mount                           {:mvn/version "0.1.16"}
   nrepl/nrepl                           {:mvn/version "1.0.0"}
+  org.clj-commons/hickory               {:mvn/version "0.7.3" }
   org.postgresql/postgresql             {:mvn/version "42.5.1"}
   org.slf4j/slf4j-simple                {:mvn/version "2.0.5"}
   org.xerial/sqlite-jdbc                {:mvn/version "3.40.0.0"}}
