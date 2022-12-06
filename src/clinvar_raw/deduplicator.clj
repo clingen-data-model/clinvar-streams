@@ -27,12 +27,12 @@
         output-topic (:DX_CV_RAW_OUTPUT_TOPIC config/env-config)
         running? (atom true)
         input-counter (atom 0)
-        output-counter (atom 0)
-        _ (rocksdb/close (rocksdb/open "deduplicator.db"))
-        _ (rocksdb/rocks-destroy! "deduplicator.db")
-        db (rocksdb/open "deduplicator.db")]
+        output-counter (atom 0)]
+    (rocksdb/close (rocksdb/open "deduplicator.db"))
+    (rocksdb/rocks-destroy! "deduplicator.db")
     (with-open [consumer (jc/consumer kafka-opts)
-                producer (jc/producer kafka-opts)]
+                producer (jc/producer kafka-opts)
+                db (rocksdb/open "deduplicator.db")]
       (jc/subscribe consumer [{:topic-name (:DX_CV_RAW_INPUT_TOPIC config/env-config)}])
       (when (:KAFKA_RESET_CONSUMER_OFFSET config/env-config)
         (log/info "Resetting to start of input topic")
@@ -51,7 +51,9 @@
               (log/infof {:input-counter @input-counter
                           :output-counter @output-counter}))))))))
 
-(defn dedup-seq [s]
+(defn dedup-seq
+  "Do not use, does not handle dangling file handle"
+  [s]
   (let [db (rocksdb/open "dedup-seq.db")]
     (letfn [(pred [e] (when (not (ingest/duplicate? db e))
                         (ingest/store-new! db e)
@@ -66,9 +68,6 @@
 (defn json-unparse-key-in
   [m ks]
   (update-in m ks #(json/generate-string %)))
-
-(defn reset-db! [db-name]
-  (rocksdb/close db-name))
 
 (defn make-reader [file-name]
   (if (.endsWith file-name ".gz")
