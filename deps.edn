@@ -1,8 +1,8 @@
-;; This does not work yet.
-;;
-;; tbl@wmf05-d86 ~/ClinVar/clinvar-streams # clj -Stree
-;; Error building classpath. Could not find artifact io.confluent:kafka-schema-registry-client:jar:5.3.1 in central (https://repo1.maven.org/maven2)
-;; tbl@wmf05-d86 ~/ClinVar/clinvar-streams 1#
+;; Later versions through 0.9.8 of jackdaw do not compile.
+;; Compiling clinvar-streams.core
+;; Syntax error macroexpanding at (data.clj:93:1).
+;; Execution error (ClassNotFoundException) at java.net.URLClassLoader/findClass (URLClassLoader.java:445).
+;; org.apache.kafka.streams.test.TestRecord
 ;;
 {:description "ClinVar data streams for ClinGen ecosystem applications"
  :url         "https://github.com/clingen-data-model/clinvar-streams"
@@ -30,7 +30,7 @@
   com.taoensso/nippy                    {:mvn/version "3.2.0"}
   com.taoensso/timbre                   {:mvn/version "6.0.3"}
   digest/digest                         {:mvn/version "1.4.10"}
-  fundingcircle/jackdaw                 {:mvn/version "0.9.8"}
+  fundingcircle/jackdaw                 {:mvn/version "0.9.4"}
   http-kit/http-kit                     {:mvn/version "2.6.0"}
   io.pedestal/pedestal.jetty            {:mvn/version "0.5.8"}
   io.pedestal/pedestal.route            {:mvn/version "0.5.8"}

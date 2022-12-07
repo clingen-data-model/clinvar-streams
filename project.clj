@@ -25,7 +25,7 @@
                  [com.taoensso/timbre "5.2.1"]
                  [c3p0/c3p0 "0.9.1.2"]
                  [digest/digest "1.4.10"]
-                 [fundingcircle/jackdaw "0.9.8"]
+                 [fundingcircle/jackdaw "0.9.4"]
                  [http-kit/http-kit "2.6.0"]
                  [io.pedestal/pedestal.jetty "0.5.7"]
                  [io.pedestal/pedestal.route "0.5.7"]
