@@ -43,7 +43,11 @@
   org.xerial/sqlite-jdbc                {:mvn/version "3.40.0.0"}}
  :paths ["src"]
  :aliases
- {:test
+ {:build                                ; clj -T:build uber
+  {:deps {io.github.clojure/tools.build {:git/tag "v0.8.4"
+                                         :git/sha "8c3cd69"}}
+   :ns-default build}
+  :test
   {:extra-paths ["test"]
    :extra-deps {org.clojure/test.check {:mvn/version "RELEASE"}}}
   :runner
