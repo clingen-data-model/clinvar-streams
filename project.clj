@@ -25,14 +25,16 @@
                  [io.pedestal/pedestal.route "0.5.8"]
                  [io.pedestal/pedestal.service "0.5.8"]
                  [mount "0.1.16"]
-                 [mount/mount "0.1.16"]
                  [org.clj-commons/hickory "0.7.3"]
                  [org.postgresql/postgresql "42.5.1"]
                  [org.slf4j/slf4j-simple "2.0.5"]
                  [org.xerial/sqlite-jdbc "3.40.0.0"]]
-  :repl-options {:init-ns clinvar-raw.deduplicator
-                 :caught clojure.repl/pst}
-  :jvm-opts ["-Xms256m" "-XX:MaxRAMPercentage=50"]
+  :repl-options {:init-ns clinvar-raw.stream
+                 :caught clojure.repl/pst
+                 :jvm-opts ["-Xms256m"
+                            #_"-XX:MaxRAMPercentage=25"
+                            "-Xmx1024m"]}
+  :jvm-opts ["-Xms256m"]
   :main clinvar-streams.core
   :aot [clinvar-streams.core]
   :resource-paths ["resources"]
