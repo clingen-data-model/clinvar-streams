@@ -68,11 +68,21 @@
   [s]
   (try (.parse ftp-time s) (catch Throwable _)))
 
+(def ^:private ftp-time-wtf
+  "And sometimes THIS is how the FTP site timestamps."
+  (SimpleDateFormat. "yyyy-MM-dd kk:mm"))
+
+(defn ^:private instify-wtf
+  "Parse string S as a date and return its Instant or NIL."
+  [s]
+  (try (.parse ftp-time-wtf s) (catch Throwable _)))
+
 (defn ^:private longify
   "Return S or S parsed into a Long after stripping commas."
   [s]
-  (try (-> s (str/replace "," "") parse-long)
-       (catch Throwable _ s)))
+  (or (try (-> s (str/replace "," "") parse-long)
+           (catch Throwable _))
+      s))
 
 (defn ^:private fix-ftp-map
   "Fix the FTP map entry M by parsing its string values."
@@ -81,11 +91,17 @@
       (update "Size"          longify)
       (update "Released"      instify)
       (update "Last Modified" instify)
+      (update "Last modified" instify-wtf) ; Programmers suck.
       (->> (remove (comp nil? second))
            (into {}))))
 
-(defn parse
+(defmulti parse
   "Parse this FTP site's hickory CONTENT and MAPULATE it."
+  (comp :type first :content))
+
+;; Handle 4-column FTP fetches with directories and files.
+;;
+(defmethod parse :element parse-4
   [content]
   (letfn [(span?   [elem] (-> elem :attrs :colspan))
           (unelem  [elem] (if (map? elem) (-> elem :content first) elem))]
@@ -102,25 +118,31 @@
            mapulate
            (map fix-ftp-map)))))
 
+;; Handle 3-column FTP fetches with only directories.
+;;
+(defmethod parse :document-type parse-3
+  [content]
+  (let [regex        #"^(.*)\t(.*)  (\S+)$"
+        [top & more] (->> content
+                          (css/select (css/child (css/tag :pre)))
+                          first :content)
+        head         (map str/trim (str/split top #"     *"))]
+    (letfn [(unelem [elem] (if (map? elem) (-> elem :content first) elem))
+            (break  [line] (->> line (re-matches regex) rest (map str/trim)))]
+      (->> more
+           (keep unelem)
+           (partition-all 2)
+           (map (comp str/trim (partial str/join \tab)))
+           rest
+           (map break)
+           (cons head)
+           mapulate
+           (map fix-ftp-map)))))
 (comment
-
   (->> ["pub" "clinvar" "xml" "clinvar_variation" "weekly_release"]
        (apply fetch)
        parse)
-
-  (->> ["pub" "clinvar" "xml" "clinvar_variation"]
-       (apply fetch)
-       parse)
-
-  (->> ["pub" "clinvar" "xml"]
-       (apply fetch)
-       parse)
-
   (->> ["pub" "clinvar"]
        (apply fetch)
-       )
-
-  (->> ["pub" "clinvar" "xml" "weekly_release"]
-       (apply fetch)
        parse)
-  )
+  tbl)
