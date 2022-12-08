@@ -58,14 +58,19 @@
        :url    (str/join "/" (into [ftp-site] stuff))}
       http/request deref :body html/parse html/as-hickory))
 
-(defn weekly
-  "Fetch list of weekly_release filenames."
+(defn raw
+  "Scrape the weekly_release FTP site and MAPULATE its content."
   []
-  (let [selector (css/or
-                  (css/child (css/tag :thead) (css/tag :tr) (css/tag :th))
-                  (css/child (css/tag :tr) (css/tag :td)))]
-    (->> ["pub" "clinvar" "xml" "clinvar_variation" "weekly_release"]
-         (apply fetch)
-         (css/select selector)
-         (map :content)
-         (map first))))
+  (letfn [(span? [elem] (-> elem :attrs :colspan))
+          (fix   [elem] (if (map? elem) (-> elem :content first) elem))]
+    (let [path     ["pub" "clinvar" "xml" "clinvar_variation" "weekly_release"]
+          selector (css/or
+                    (css/child (css/tag :thead) (css/tag :tr) (css/tag :th))
+                    (css/child (css/tag :tr) (css/tag :td)))
+          rows     (->> path (apply fetch) (css/select selector))
+          span     (->> rows (keep span?) first parse-long)]
+      (->> rows
+           (remove span?)
+           (map (comp fix first :content))
+           (partition-all span)
+           mapulate))))
