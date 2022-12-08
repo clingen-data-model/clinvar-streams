@@ -61,7 +61,9 @@
 (defn weekly
   "Fetch list of weekly_release filenames."
   []
-  (let [selector (css/child (css/tag :tr) (css/tag :td))]
+  (let [selector (css/or
+                  (css/child (css/tag :thead) (css/tag :tr) (css/tag :th))
+                  (css/child (css/tag :tr) (css/tag :td)))]
     (->> ["pub" "clinvar" "xml" "clinvar_variation" "weekly_release"]
          (apply fetch)
          (css/select selector)
