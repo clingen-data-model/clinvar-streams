@@ -51,7 +51,7 @@
       tabulate mapulate))
 
 (defn fetch
-  "Fetch STUFF from FTP-SITE."
+  "Return STUFF from FTP-SITE as a hicory tree."
   [& stuff]
   (-> {:as     :text
        :method :get
@@ -73,4 +73,4 @@
            (remove span?)
            (map (comp fix first :content))
            (partition-all span)
-           mapulate))))
+           mapulate rest))))
