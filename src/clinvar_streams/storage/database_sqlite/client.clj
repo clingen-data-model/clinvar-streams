@@ -1,7 +1,7 @@
 (ns clinvar-streams.storage.database-sqlite.client
   (:require [clojure.java.io :as io]
             [clojure.java.jdbc :as jdbc]
-            [clojure.java.shell :refer :all]
+            [clojure.java.shell :as shell]
             [taoensso.timbre :as log]
             [clinvar-streams.util :as util]
             [clinvar-combiner.config :as config])
@@ -20,11 +20,11 @@
   (str sql-resource-root "/" filename))
 
 (defn run-sql-resource [db-path filename]
-  (let [resource-path (sql-resource-path filename)]
-    (let [sh-ret (sh "sqlite3" db-path :in (slurp (io/resource resource-path)))]
-      (if (not= 0 (:exit sh-ret))
-        (do                                                 ;(log/error (ex-info (str "Failed to run ") sh-ret))
-          (throw (ex-info (str "Failed to run " resource-path) sh-ret)))))))
+  (let [resource-path (sql-resource-path filename)
+        sh-ret (shell/sh "sqlite3" db-path :in (slurp (io/resource resource-path)))]
+    (when-not (zero? (:exit sh-ret))
+      #_(log/error (ex-info (str "Failed to run ") sh-ret))
+      (throw (ex-info (str "Failed to run " resource-path) sh-ret)))))
 
 (defn configure!
   "Configures the client to use the database at the provided db-path.
@@ -33,15 +33,15 @@
   ([]
    (configure! config/sqlite-db))
   ([db-path]
-   ; non-core keys in db are passed as Properties to DriverManager/getConnection
-   ; https://github.com/clojure/java.jdbc/blob/acffd9f5f216f8b8c1fc960c1d47b0b5feb56730/src/main/clojure/clojure/java/jdbc.clj#L271
+                                        ; non-core keys in db are passed as Properties to DriverManager/getConnection
+                                        ; https://github.com/clojure/java.jdbc/blob/acffd9f5f216f8b8c1fc960c1d47b0b5feb56730/src/main/clojure/clojure/java/jdbc.clj#L271
    (reset! db {:classname "org.sqlite.JDBC"
                :subprotocol "sqlite"
                :subname db-path
-               ; foreign_keys=on sets PRAGMA foreign_keys=on
+                                        ; foreign_keys=on sets PRAGMA foreign_keys=on
                :foreign_keys "on"
                :synchronous "off"
-               ; timeout in milliseconds
+                                        ; timeout in milliseconds
                :busy_timeout 30000})
    (let [conn (jdbc/get-connection @db)]
      (.close conn))))

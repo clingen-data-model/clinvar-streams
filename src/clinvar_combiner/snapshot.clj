@@ -1,25 +1,18 @@
 (ns clinvar-combiner.snapshot
-  (:require [clinvar-streams.storage.database-sqlite.client :as db-client]
-            [clinvar-combiner.config
-             :refer [topic-metadata]]
+  (:require [clinvar-combiner.config :as config]
             [clinvar-combiner.stream :as stream]
-            [clojure.java.shell :refer [sh]]
-            [me.raynes.fs :as fs]
-            [taoensso.timbre :as log]
-            [clojure.string :as s]
+            [clinvar-streams.storage.database-sqlite.client :as db-client]
+            [clinvar-streams.util :as util]
+            [clojure.java.shell :as shell]
             [jackdaw.client :as jc]
-            [clinvar-combiner.config :as config]
-            [clinvar-streams.util :as util])
-  (:import (java.nio.file Paths)
-           (com.google.common.io ByteStreams)
-           (com.google.cloud.storage
-             Bucket BucketInfo Storage StorageOptions
-             BlobId BlobInfo Blob Storage$BlobWriteOption)
-           (java.io FileInputStream)
-           (java.nio.channels FileChannel)
-           (org.apache.kafka.common TopicPartition)
-           (java.time Duration Instant)))
-
+            [me.raynes.fs :as fs]
+            [taoensso.timbre :as log])
+  (:import [com.google.cloud.storage
+            BlobId BlobInfo Storage$BlobWriteOption StorageOptions]
+           [com.google.common.io ByteStreams]
+           [java.io FileInputStream]
+           [java.nio.file Paths]
+           [java.time Duration Instant]))
 
 (defn download-file
   "Pull the specified file from cloud storage, writing it locally to target-path"
@@ -59,7 +52,7 @@
   "Performs tar extract and gzip decompress on the path, writing the output to dest directory."
   [path dest]
   (log/info {:fn :extract-file :path path :dest dest})
-  (let [ret (sh "tar" "-xzf" path "-C" dest)]
+  (let [ret (shell/sh "tar" "-xzf" path "-C" dest)]
     (log/info {:fn :extract-file :msg ret})
     (if (not= 0 (:exit ret))
       (throw (ex-info "Failed to extract file" ret))
@@ -71,7 +64,7 @@
   directory itself, plus the contents, recursively."
   [path dest]
   (log/info {:fn :archive-file :path path :dest dest})
-  (let [ret (sh "tar" "-czf" dest path)]
+  (let [ret (shell/sh "tar" "-czf" dest path)]
     (log/info {:fn :archive-file :msg ret})
     (if (not= 0 (:exit ret))
       (throw (ex-info "Failed to archive file" ret))
@@ -110,7 +103,9 @@
 
 (defn make-consumer
   []
-  (jc/consumer (clinvar-combiner.config/kafka-config (clinvar-combiner.config/app-config))))
+  (jc/consumer
+   (clinvar-combiner.config/kafka-config
+    (clinvar-combiner.config/app-config))))
 
 (defn build-database
   [consumer partitions]
@@ -191,13 +186,13 @@
 (defn -main [& args]
   (let [version-to-resume-from config/version-to-resume-from
         consumer (make-consumer)
-        topic-name (-> topic-metadata :input :topic-name)
+        topic-name (-> config/topic-metadata :input :topic-name)
         partitions (stream/topic-partitions consumer topic-name)]
     (apply (partial jc/assign consumer) partitions)
 
-    ; Use version to set database state (if needed) and set the consumer offsets
+                                        ; Use version to set database state (if needed) and set the consumer offsets
     (cond
-      ; Resume from start of topic
+                                        ; Resume from start of topic
       (empty? version-to-resume-from)
       (do (log/info "No snapshot resume version specified, starting from scratch")
           (fs/delete config/sqlite-db)
@@ -205,13 +200,13 @@
           (log/info "Seeking to beginning of topic")
           (jc/seek-to-beginning-eager consumer)),
 
-      ; Resume from whatever the local state is
+                                        ; Resume from whatever the local state is
       (= "LOCAL" version-to-resume-from)
       (do (log/info "Resuming from latest local snapshot")
           (db-client/configure-ensure-init!)
           (stream/set-consumer-to-db-offset consumer partitions)),
 
-      ; Wipe local state and resume from a remote snapshot
+                                        ; Wipe local state and resume from a remote snapshot
       :else
       (do (log/info "Attempting to resume from remote snapshot version:" version-to-resume-from)
           (set-db-to-version! version-to-resume-from)
