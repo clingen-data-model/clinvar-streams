@@ -95,6 +95,8 @@
       (->> (remove (comp nil? second))
            (into {}))))
 
+;; This dispatch function is an HACK.
+;;
 (defmulti parse
   "Parse this FTP site's hickory CONTENT and MAPULATE it."
   (comp :type first :content))
@@ -119,7 +121,7 @@
            (map fix-ftp-map)))))
 
 ;; Handle 3-column FTP fetches with only directories.
-;; The middle group in REGEX is the 'Last modified' timestamp.
+;; The middle group is the 'Last modified' FTP-TIME-WTF timestamp.
 ;;
 (defmethod parse :document-type parse-3
   [content]
@@ -127,7 +129,7 @@
         [top & rows] (->> content
                           (css/select (css/child (css/tag :pre)))
                           first :content)
-        header       (map str/trim (str/split top #"     *"))]
+        header (map str/trim (str/split top #"     *"))]
     (letfn [(unelem [elem] (if (map? elem) (-> elem :content first) elem))
             (break  [line] (->> line (re-matches regex) rest))]
       (->> rows
