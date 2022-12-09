@@ -119,23 +119,24 @@
            (map fix-ftp-map)))))
 
 ;; Handle 3-column FTP fetches with only directories.
+;; The middle group in REGEX is the 'Last modified' timestamp.
 ;;
 (defmethod parse :document-type parse-3
   [content]
-  (let [regex        #"^(.*)\t(.*)  (\S+)$"
-        [top & more] (->> content
+  (let [regex #"^\s*(.*)\s*\t\s*(\d\d\d\d\-\d\d\-\d\d \d\d:\d\d)\s+(\S+)\s*$"
+        [top & rows] (->> content
                           (css/select (css/child (css/tag :pre)))
                           first :content)
-        head         (map str/trim (str/split top #"     *"))]
+        header       (map str/trim (str/split top #"     *"))]
     (letfn [(unelem [elem] (if (map? elem) (-> elem :content first) elem))
-            (break  [line] (->> line (re-matches regex) rest (map str/trim)))]
-      (->> more
+            (break  [line] (->> line (re-matches regex) rest))]
+      (->> rows
            (keep unelem)
            (partition-all 2)
-           (map (comp str/trim (partial str/join \tab)))
+           (map (partial str/join \tab))
            rest
            (map break)
-           (cons head)
+           (cons header)
            mapulate
            (map fix-ftp-map)))))
 (comment
