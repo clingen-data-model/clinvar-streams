@@ -1,6 +1,9 @@
 (ns injest
   "Mistakenly ingest stuff."
-  (:require [clojure.java.io    :as io]
+  (:require [clojure.data.json  :as json]
+            [clojure.instant    :as instant]
+            [clojure.java.io    :as io]
+            [clojure.java.shell :as shell]
             [clojure.pprint     :refer [pprint]]
             [clojure.spec.alpha :as s]
             [clojure.string     :as str]
@@ -29,7 +32,17 @@
 
 (def ^:private staging
   "The bucket where Monster ingest stages the ClinVar files."
-  "gs://broad-dsp-monster-clingen-prod")
+  "gs://broad-dsp-monster-clingen-prod-staging-storage")
+
+"gs://broad-dsp-monster-clingen-prod-staging-storage/20221213T010000/"
+
+(defn parse-json
+  "Parse STREAM as JSON or print it."
+  [stream]
+  (try (json/read stream :key-fn keyword)
+       (catch Throwable x
+         (pprint {:exception x :stream (slurp stream)})
+         stream)))
 
 (defn ^:private tabulate
   "Return a vector of vectors from FILE as a Tab-Separated-Values table."
@@ -68,14 +81,14 @@
   [s]
   (try (.parse ftp-time s) (catch Throwable _)))
 
-(def ^:private ftp-time-wtf
+(def ^:private ftp-time-ymdhm
   "And sometimes THIS is how the FTP site timestamps."
   (SimpleDateFormat. "yyyy-MM-dd kk:mm"))
 
-(defn ^:private instify-wtf
+(defn ^:private instify-ymdhm
   "Parse string S as a date and return its Instant or NIL."
   [s]
-  (try (.parse ftp-time-wtf s) (catch Throwable _)))
+  (try (.parse ftp-time-ymdhm s) (catch Throwable _)))
 
 (defn ^:private longify
   "Return S or S parsed into a Long after stripping commas."
@@ -91,7 +104,7 @@
       (update "Size"          longify)
       (update "Released"      instify)
       (update "Last Modified" instify)
-      (update "Last modified" instify-wtf) ; Programmers suck.
+      (update "Last modified" instify-ymdhm) ; Programmers suck.
       (->> (remove (comp nil? second))
            (into {}))))
 
@@ -121,7 +134,7 @@
            (map fix-ftp-map)))))
 
 ;; Handle 3-column FTP fetches with only directories.
-;; The middle group is the 'Last modified' FTP-TIME-WTF timestamp.
+;; The middle group is the 'Last modified' FTP-TIME-YMDHM timestamp.
 ;;
 (defmethod parse :document-type parse-3
   [content]
@@ -141,11 +154,81 @@
            (cons header)
            mapulate
            (map fix-ftp-map)))))
+
+(defn ^:private shell
+  "Run ARGS in a shell and return stdout or throw."
+  [& args]
+  (let [{:keys [exit err out]} (apply shell/sh args)]
+    (when-not (zero? exit)
+      (throw (ex-info (format "injest: %s exit status from: %s : %s"
+                              exit args err))))
+    (str/trim out)))
+
+;; Wrap an authorization header around Bearer TOKEN.
+;;
+(defn ^:private auth-header
+  []
+  {"Authorization"
+   (str/join \space ["Bearer" (shell "gcloud" "auth" "print-access-token")])})
+
+(def ^:private api-url
+  "The Google Cloud API URL."
+  "https://www.googleapis.com/")
+
+(def ^:private storage-url
+  "The Google Cloud URL for storage operations."
+  (str api-url "storage/v1/"))
+
+(def ^:private bucket-url
+  "The Google Cloud Storage URL for bucket operations."
+  (str storage-url "b/"))
+
+(defn ^:private parse-gs-url
+  "Return BUCKET and OBJECT from a gs://bucket/object URL."
+  [url]
+  (let [[gs-colon nada bucket object] (str/split url #"/" 4)]
+    (when-not
+        (and (every? seq [gs-colon bucket])
+             (= "gs:" gs-colon)
+             (= "" nada))
+      (throw (ex-info "Bad GCS URL" {:url url})))
+    [bucket (or object "")]))
+
+(defn ^:private list-objects
+  "The objects in BUCKET with PREFIX in a lazy sequence."
+  ([bucket prefix]
+   (letfn [(each [pageToken]
+             (let [{:keys [items nextPageToken]}
+                   (-> {:as           :stream
+                        :content-type :application/json
+                        :headers      (auth-header)
+                        :method       :get
+                        :url          (str bucket-url bucket "/o")
+                        :query-params {:prefix prefix
+                                       :maxResults 999
+                                       :pageToken pageToken}}
+                       http/request deref :body io/reader parse-json)]
+               (lazy-cat items (when nextPageToken (each nextPageToken)))))]
+     (each "")))
+  ([url]
+   (apply list-objects (parse-gs-url url))))
+
 (comment
+  (->> staging parse-gs-url)
   (->> ["pub" "clinvar" "xml" "clinvar_variation" "weekly_release"]
        (apply fetch)
        parse)
   (->> ["pub" "clinvar"]
        (apply fetch)
        parse)
+  (def xmls
+    (->> staging list-objects
+         (map #(select-keys % [:name :updated]))
+         (filter #(str/ends-with? (:name %) "/xml/ClinVarRelease.xml.gz"))))
+  (count xmls)
+  ;; => 426
+  (instant/read-instant-date "2021-11-03T00:01:53.859Z")
+  ;; => #inst "2021-11-03T00:01:53.859-00:00"
+  (instant/read-instant-timestamp "2021-11-03T00:01:53.859Z")
+  ;; => #inst "2021-11-03T00:01:53.859000000-00:00"
   tbl)
