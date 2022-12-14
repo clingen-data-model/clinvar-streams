@@ -108,13 +108,13 @@
 
 ;; This dispatch function is an HACK.
 ;;
-(defmulti parse
+(defmulti parse-ftp
   "Parse this FTP site's hickory CONTENT and MAPULATE it."
   (comp :type first :content))
 
 ;; Handle 4-column FTP fetches with directories and files.
 ;;
-(defmethod parse :element parse-4
+(defmethod parse-ftp :element parse-4
   [content]
   (letfn [(span?   [elem] (-> elem :attrs :colspan))
           (unelem  [elem] (if (map? elem) (-> elem :content first) elem))]
@@ -134,7 +134,7 @@
 ;; Handle 3-column FTP fetches with only directories.
 ;; The middle group is the 'Last modified' FTP-TIME-YMDHM timestamp.
 ;;
-(defmethod parse :document-type parse-3
+(defmethod parse-ftp :document-type parse-3
   [content]
   (let [regex #"^\s*(.*)\s*\t\s*(\d\d\d\d\-\d\d\-\d\d \d\d:\d\d)\s+(\S+)\s*$"
         [top & rows] (->> content
@@ -201,18 +201,29 @@
    (list-prefixes bucket "")))
 
 (defn staged
-  "Return timestamp from prefixes in BUCKET."
-  [bucket]
+  "Return timestamps from prefixes in STAGING-BUCKET."
+  []
   (let [regex #"^(\d\d\d\d)(\d\d)(\d\d)T(\d\d)(\d\d)(\d\d)/$"]
     (letfn [(instify [prefix]
               (let [[ok YYYY MM DD hh mm ss] (re-matches regex prefix)]
                 (when ok
                   (instant/read-instant-timestamp
                    (str YYYY \- MM \- DD \T hh \: mm \: ss)))))]
-      (->> bucket list-prefixes (map instify)))))
+      (->> staging-bucket list-prefixes (map instify)))))
+
+(defn released
+  "Return clinvar_variation/weekly_release information from FTP-SITE."
+  []
+  (->> ["pub" "clinvar" "xml" "clinvar_variation" "weekly_release"]
+       (apply fetch)
+       parse))
 
 (comment
-  (staged staging-bucket)
+  "gs://broad-dsp-monster-clingen-prod-staging-storage/20221214T010000/"
+  {"Name" "ClinVarVariationRelease_2022-1211.xml.gz",
+   "Size" 2235469492,
+   "Released" #inst "2022-12-12T09:43:54.000-00:00",
+   "Last Modified" #inst "2022-12-12T09:43:54.000-00:00"}
   (->> ["pub" "clinvar" "xml" "clinvar_variation" "weekly_release"]
        (apply fetch)
        parse)
