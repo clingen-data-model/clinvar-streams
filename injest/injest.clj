@@ -30,11 +30,9 @@
   "FTP site of the National Library of Medicine."
   "https://ftp.ncbi.nlm.nih.gov")
 
-(def ^:private staging
-  "The bucket where Monster ingest stages the ClinVar files."
-  "gs://broad-dsp-monster-clingen-prod-staging-storage")
-
-"gs://broad-dsp-monster-clingen-prod-staging-storage/20221213T010000/"
+(def ^:private staging-bucket
+  "Name of the bucket where Monster ingest stages the ClinVar files."
+  "broad-dsp-monster-clingen-prod-staging-storage")
 
 (defn parse-json
   "Parse STREAM as JSON or print it."
@@ -183,38 +181,38 @@
   "The Google Cloud Storage URL for bucket operations."
   (str storage-url "b/"))
 
-(defn ^:private parse-gs-url
-  "Return BUCKET and OBJECT from a gs://bucket/object URL."
-  [url]
-  (let [[gs-colon nada bucket object] (str/split url #"/" 4)]
-    (when-not
-        (and (every? seq [gs-colon bucket])
-             (= "gs:" gs-colon)
-             (= "" nada))
-      (throw (ex-info "Bad GCS URL" {:url url})))
-    [bucket (or object "")]))
-
-(defn ^:private list-objects
-  "The objects in BUCKET with PREFIX in a lazy sequence."
+(defn ^:private list-prefixes
+  "Return all names in BUCKET with PREFIX in a lazy sequence."
   ([bucket prefix]
-   (letfn [(each [pageToken]
-             (let [{:keys [items nextPageToken]}
-                   (-> {:as           :stream
-                        :content-type :application/json
-                        :headers      (auth-header)
-                        :method       :get
-                        :url          (str bucket-url bucket "/o")
-                        :query-params {:prefix prefix
-                                       :maxResults 999
-                                       :pageToken pageToken}}
-                       http/request deref :body io/reader parse-json)]
-               (lazy-cat items (when nextPageToken (each nextPageToken)))))]
-     (each "")))
-  ([url]
-   (apply list-objects (parse-gs-url url))))
+   (let [params {:delimiter "/" :maxResults 999 :prefix prefix}]
+     (letfn [(each [pageToken]
+               (let [{:keys [nextPageToken prefixes]}
+                     (-> {:as           :stream
+                          :content-type :application/json
+                          :headers      (auth-header)
+                          :method       :get
+                          :url          (str bucket-url bucket "/o")
+                          :query-params (assoc params :pageToken pageToken)}
+                         http/request deref :body io/reader parse-json)]
+                 (lazy-cat prefixes
+                           (when nextPageToken (each nextPageToken)))))]
+       (each ""))))
+  ([bucket]
+   (list-prefixes bucket "")))
+
+(defn staged
+  "Return timestamp from prefixes in BUCKET."
+  [bucket]
+  (let [regex #"^(\d\d\d\d)(\d\d)(\d\d)T(\d\d)(\d\d)(\d\d)/$"]
+    (letfn [(instify [prefix]
+              (let [[ok YYYY MM DD hh mm ss] (re-matches regex prefix)]
+                (when ok
+                  (instant/read-instant-timestamp
+                   (str YYYY \- MM \- DD \T hh \: mm \: ss)))))]
+      (->> bucket list-prefixes (map instify)))))
 
 (comment
-  (->> staging parse-gs-url)
+  (staged staging-bucket)
   (->> ["pub" "clinvar" "xml" "clinvar_variation" "weekly_release"]
        (apply fetch)
        parse)
@@ -225,10 +223,4 @@
     (->> staging list-objects
          (map #(select-keys % [:name :updated]))
          (filter #(str/ends-with? (:name %) "/xml/ClinVarRelease.xml.gz"))))
-  (count xmls)
-  ;; => 426
-  (instant/read-instant-date "2021-11-03T00:01:53.859Z")
-  ;; => #inst "2021-11-03T00:01:53.859-00:00"
-  (instant/read-instant-timestamp "2021-11-03T00:01:53.859Z")
-  ;; => #inst "2021-11-03T00:01:53.859000000-00:00"
   tbl)
