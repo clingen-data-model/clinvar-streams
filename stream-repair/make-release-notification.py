@@ -1,13 +1,15 @@
 import json
 import re
 import os
+import pathlib
+import google.cloud
 from google.cloud import storage
 
 storage_client = storage.Client(project="broad-dsp-monster-clingen-prod")
 bucket_name = "broad-dsp-monster-clingen-prod-ingest-results"
-release_prefixes = ["backdiff_20190701"]
 
 """
+Notification structure example:
 {"release_date": "2019-07-01", "bucket": "broad-dsp-monster-clingen-prod-ingest-results", "files": ["backdiff_20190701/clinical_assertion/created/000000000000", "backdiff_20190701/clinical_assertion/created/000000000001", "backdiff_20190701/clinical_assertion_observation/created/000000000000", "backdiff_20190701/clinical_assertion_trait/created/000000000000", "backdiff_20190701/clinical_assertion_trait_set/created/000000000000", "backdiff_20190701/clinical_assertion_variation/created/000000000000", "backdiff_20190701/gene/created/000000000000", "backdiff_20190701/gene_association/created/000000000000",
     "backdiff_20190701/gene_association/created/000000000001", "backdiff_20190701/rcv_accession/created/000000000000", "backdiff_20190701/release_date.txt", "backdiff_20190701/submission/created/000000000000", "backdiff_20190701/submitter/created/000000000000", "backdiff_20190701/trait/created/000000000000", "backdiff_20190701/trait_mapping/created/000000000000", "backdiff_20190701/trait_set/created/000000000000", "backdiff_20190701/variation/created/000000000000", "backdiff_20190701/variation/created/000000000001", "backdiff_20190701/variation/created/000000000002", "backdiff_20190701/variation_archive/created/000000000000"]}
 """
@@ -30,12 +32,32 @@ def ensure_trailing_slash(s: str) -> str:
         return s + "/"
 
 
+def is_a_release_file(filename: str) -> bool:
+    if isinstance(filename, google.cloud.storage.blob.Blob):
+        filename = blob_path(filename)
+    # Is a diff file
+    terms = filename.split("/")
+    print(terms)
+    if (len(terms) == 4 and
+            terms[2] in ["created", "updated", "deleted"]):
+        return True
+    # Is a release_date.txt file
+    if (len(terms) == 2 and
+            terms[1] == "release_date.txt"):
+        return True
+    with open("exclusions.log", "a") as fout:
+        msg = "excluded blob: " + str(filename)
+        print(msg)
+        fout.write(msg + "\n")
+    return False
+
+
 def generate_notif_for_release(client, bucket, release_prefix):
     # List all files in bucket with release prefix
     blob_iterator = client.list_blobs(bucket,
                                       prefix=ensure_trailing_slash(release_prefix))
     all_blobs = flatten1([[pb for pb in page] for page in blob_iterator.pages])
-
+    all_blobs = list(filter(is_a_release_file, all_blobs))
     # Get the release date stored in this release directory
     release_date_files = list(filter(lambda blob: blob.name.endswith("release_date.txt"),
                                      all_blobs))
@@ -94,11 +116,6 @@ def validate_notifs_equal(expecteds, actuals):
             if not tf.startswith(release_prefix):
                 raise RuntimeError("Files did not all start with same prefix:\n" +
                                    str(exp))
-        # Generate a release notification that should match the one on the topic
-        # generated_notif = generate_notif_for_release(
-        #     storage_client,
-        #     topic_bucket,
-        #     release_prefix)
         # Check fields
         if act["release_date"] != topic_release_date:
             raise RuntimeError(
@@ -118,15 +135,6 @@ def validate_notifs_equal(expecteds, actuals):
                  "\nactual: {}")
                 .format(exp_files_diff, act_files_diff,
                         json.dumps(exp), json.dumps(act)))
-        # if g_files != t_files:
-        #     raise RuntimeError(
-        #         ("Generated file listing did not match topic file listing for release {} dir {}"
-        #          "\nGenerated files: {}"
-        #          "\nTopic files: {}").format(
-        #              generated_notif["release_date"],
-        #              release_prefix,
-        #              g_files,
-        #              t_files))
 
 
 def regenerate_notifs(client, notifs: list) -> list:
@@ -136,7 +144,6 @@ def regenerate_notifs(client, notifs: list) -> list:
     """
     out = []
     for in_notif in notifs:
-        topic_release_date = in_notif["release_date"]
         topic_bucket = in_notif["bucket"]
         topic_files = in_notif["files"]
         release_prefix = topic_files[0].split("/")[0] + "/"
@@ -200,42 +207,70 @@ def release_notification_file_sizes(client, bucket, files: list) -> dict:
     return out
 
 
+def makeparents(path: str):
+    """
+    Makes the directories that are the parents of the file specified by path.
+    If path is intended to be a directory, does not create the final directory.
+    Doing makeparents and then os.mkdir on the same arg will meet that use case.
+    makeparents(path)
+    os.mkdir(path)
+    """
+    pathlib.Path(os.path.dirname(path)).mkdir(parents=True, exist_ok=True)
+
+
 def blob_download_if_not(blob):
     path = blob_path(blob)
     assert len(path) > 0, {"blob": blob}
     if os.path.exists(path) and os.path.isfile(path):
         if os.path.getsize(path) == blob.size:
-            return open(path, "r")
+            return path
         os.remove(path)
+    print(f"Downloading {path}")
+    makeparents(path)
     blob.download_to_filename(path)
     return path
 
 
 def blob_download_open(blob):
-    "Opens a blob by downloading it first and then reading from that local file"
+    """
+    Opens a blob by downloading it first and then opening that local file.
+    Useful for opening a remote blob, but caching it locally for future reads.
+    """
     return open(blob_download_if_not(blob))
 
 
 def blob_path(blob):
     """
     Returns the path of the blob, not including the bucket.
+    e.g. gs://mybucket/p1/p2/fileA -> p1/p2/fileA
     """
     return blob.name
 
 
-def release_notification_file_record_counts(client, bucket, files: list) -> dict:
+def release_notification_file_record_counts(client, bucket, files: list, cache_locally=True) -> dict:
     """
     For each file in the list, obtain the number of nonempty lines.
     Returns a dict of filename(str) -> count(int).
+
+    If cache_locally is true, will download all of the blobs in the files list to the working
+    directory and read from there. Next use of blob_download_open should be faster.
     """
     # https://cloud.google.com/python/docs/reference/storage/latest/google.cloud.storage.blob.Blob
     # if bucket was str, should resolve here
     bucket = client.get_bucket(bucket)
     out = {}
+
+    def do_open(blob):
+        if cache_locally:
+            return blob_download_open(blob)
+        else:
+            return blob.open()
+
     for file_name in files:
         blob = bucket.get_blob(file_name)
         line_count = 0
-        with blob.open() as f:
+        # with blob.open() as f:
+        with do_open(blob) as f:
             for line in f:
                 if len(line.strip()) > 0:
                     line_count += 1
@@ -262,81 +297,11 @@ def write_release_mappings(filename, mappings):
                        .format(str(m1), str(m2)))
 
 
-# Generate a mapping file based on a file of release notifications
-# with open("broad-dsp-clinvar_backup_20221201.txt") as f:
-#     notif_lines = f.readlines()
-# topic_notifs = [json.loads(line) for line in notif_lines]
-# # topic_notifs = topic_notifs[:20]
-# release_dir_mappings = release_to_dir_mapping(topic_notifs)
-# write_release_mappings("broad-dsp-clinvar_release_mappings.txt",
-#                        release_dir_mappings)
-
-
-# Validate that a file of release notifications matches what
-# is in the bucket for that release
-# regenerated_topic_notifs = regenerate_notifs(storage_client, topic_notifs)
-# validate_notifs_equal(topic_notifs, regenerated_topic_notifs)
-
-
-# Generate notifications based on a mappings file
-mapping_file = "broad-dsp-clinvar_release_mappings.txt"
-notifications_file = "broad-dsp-clinvar_generated_notifications.txt"
-release_dir_mappings = read_release_mappings(mapping_file)
-notifications = release_dir_map_to_notifications(storage_client,
-                                                 bucket_name,
-                                                 release_dir_mappings)
-with open(notifications_file, "w") as fout:
-    for notif in notifications:
-        fout.write(json.dumps(notif))
-        fout.write("\n")
-
-
-# Validate that the generated notifications matches a file of the topic of those same mappings
-expected_notifications_file = "broad-dsp-clinvar_backup_20221201.txt"
-with open(expected_notifications_file) as f:
-    expected_notifications = [json.loads(line.strip()) for line in f]
-assert len(expected_notifications) == len(notifications)
-exceptions = []
-for (expected, actual) in zip(expected_notifications, notifications):
-    try:
-        validate_notifs_equal([expected], [actual])
-    except Exception as e:
-        exceptions.append({
-            "expected": expected,
-            "actual": actual,
-            "exception": e
-        })
-
-
 def notif_by_release_date(notifications, release_date, matched_index=0):
     """
     Returns the notification with a given release_date
     """
     return list(filter(lambda n: n["release_date"] == release_date, notifications))[matched_index]
-
-
-# Load the fixed set of notifications
-fixed_release_mappings = read_release_mappings(
-    "broad-dsp-clinvar_release_mappings_FIXED.txt")
-fixed_notifications = release_dir_map_to_notifications(
-    storage_client, bucket_name, fixed_release_mappings)
-
-
-notifications_to_compare = [
-    (notif_by_release_date(expected_notifications, "2022-03-20"),
-     notif_by_release_date(fixed_notifications, "2022-03-20")),
-
-    (notif_by_release_date(expected_notifications, "2022-03-30"),
-     notif_by_release_date(fixed_notifications, "2022-03-30")),
-
-    (notif_by_release_date(expected_notifications, "2022-04-03"),
-     notif_by_release_date(fixed_notifications, "2022-04-03")),
-
-    (notif_by_release_date(expected_notifications, "2022-04-13"),
-     notif_by_release_date(fixed_notifications, "2022-04-13")),
-]
-
-# Should be no created or deleted submitters between 3/20 and 3/30
 
 
 def counts_by_table_op(count_map):
@@ -372,45 +337,180 @@ def counts_by_table_op(count_map):
     return flattened
 
 
-records_counts = []
-for n1, n2 in notifications_to_compare:
-    n1_record_counts = release_notification_file_record_counts(
-        storage_client,
-        bucket_name,
-        n1["files"])
-    n2_record_counts = release_notification_file_record_counts(
-        storage_client,
-        bucket_name,
-        n2["files"])
-    records_counts.append({
-        "notifs": [n1, n2],
-        "release_date": [n1["release_date"],
-                         n2["release_date"]],
-        "record_counts": [n1_record_counts,
-                          n2_record_counts]
-    })
+def validate_0330_0413():
+    # Load the fixed set of notifications
+    fixed_release_mappings = read_release_mappings(
+        "broad-dsp-clinvar_release_mappings_FIXED.txt")
+    fixed_notifications = release_dir_map_to_notifications(
+        storage_client, bucket_name, fixed_release_mappings)
 
-# Annotate each count record with an op_counts which is the counts per
-# file aggregated by the table and create/update/delete operation
-for record_count in records_counts:
-    n1_record_counts = record_count["record_counts"][0]
-    n2_record_counts = record_count["record_counts"][1]
-    n1_op_counts = counts_by_table_op(n1_record_counts)
-    n2_op_counts = counts_by_table_op(n2_record_counts)
-    record_count["op_counts"] = [
-        n1_op_counts,
-        n2_op_counts
+    notifications_to_compare = [
+        (notif_by_release_date(received_notifications, "2022-03-20"),
+            notif_by_release_date(fixed_notifications, "2022-03-20")),
+
+        (notif_by_release_date(received_notifications, "2022-03-30"),
+            notif_by_release_date(fixed_notifications, "2022-03-30")),
+
+        (notif_by_release_date(received_notifications, "2022-04-03"),
+            notif_by_release_date(fixed_notifications, "2022-04-03")),
+
+        (notif_by_release_date(received_notifications, "2022-04-13"),
+            notif_by_release_date(fixed_notifications, "2022-04-13")),
     ]
+    # Should be no created or deleted submitters between 3/20 and 3/30
 
-# records_counts.append([
-#     {"release_date": n1["release_date"],
-#      "record_counts": n1_record_counts},
-#     {"release_date": n2["release_date"],
-#      "record_counts": n2_record_counts}
-# ])
+    records_counts = []
+    for n1, n2 in notifications_to_compare:
+        n1_record_counts = release_notification_file_record_counts(
+            storage_client,
+            bucket_name,
+            n1["files"])
+        n2_record_counts = release_notification_file_record_counts(
+            storage_client,
+            bucket_name,
+            n2["files"])
+        records_counts.append({
+            "notifs": [n1, n2],
+            "release_date": [n1["release_date"],
+                             n2["release_date"]],
+            "record_counts": [n1_record_counts,
+                              n2_record_counts]
+        })
 
-with open("record_counts.json", "w") as fout:
-    json.dump(records_counts, fout)
+    # Annotate each count record with an op_counts which is the counts per
+    # file aggregated by the table and create/update/delete operation
+    for record_count in records_counts:
+        n1_record_counts = record_count["record_counts"][0]
+        n2_record_counts = record_count["record_counts"][1]
+        n1_op_counts = counts_by_table_op(n1_record_counts)
+        n2_op_counts = counts_by_table_op(n2_record_counts)
+        record_count["op_counts"] = [
+            n1_op_counts,
+            n2_op_counts
+        ]
+
+    with open("record_counts.json", "w") as fout:
+        json.dump(records_counts, fout)
+
+
+def validate_20220620_20220626():
+    # Load the fixed set of notifications
+    fixed_release_mappings = read_release_mappings(
+        "broad-dsp-clinvar_release_mappings_FIXED.txt")
+    fixed_release_mappings = list(filter(lambda rd_dir: rd_dir[0].startswith("2022-06"),
+                                         fixed_release_mappings))
+    fixed_notifications = release_dir_map_to_notifications(
+        storage_client, bucket_name, fixed_release_mappings)
+
+    notifications_to_compare = [
+        (notif_by_release_date(received_notifications, "2022-06-19"),
+            notif_by_release_date(fixed_notifications, "2022-06-20")),
+
+        (notif_by_release_date(received_notifications, "2022-06-26"),
+            notif_by_release_date(fixed_notifications, "2022-06-26"))
+    ]
+    # Should be no created or deleted submitters between 3/20 and 3/30
+
+    records_counts = []
+    for n1, n2 in notifications_to_compare:
+        n1_record_counts = release_notification_file_record_counts(
+            storage_client,
+            bucket_name,
+            n1["files"])
+        n2_record_counts = release_notification_file_record_counts(
+            storage_client,
+            bucket_name,
+            n2["files"])
+        records_counts.append({
+            "notifs": [n1, n2],
+            "release_date": [n1["release_date"],
+                             n2["release_date"]],
+            "record_counts": [n1_record_counts,
+                              n2_record_counts],
+        })
+
+    # Annotate each count record with an op_counts which is the counts per
+    # file aggregated by the table and create/update/delete operation
+    for record_count in records_counts:
+        n1_record_counts = record_count["record_counts"][0]
+        n2_record_counts = record_count["record_counts"][1]
+        n1_op_counts = counts_by_table_op(n1_record_counts)
+        n2_op_counts = counts_by_table_op(n2_record_counts)
+        record_count["op_counts"] = [
+            n1_op_counts,
+            n2_op_counts
+        ]
+
+    # Annotate with op count diffs
+    for record_count in records_counts:
+        n1_op_counts = record_count["op_counts"][0]
+        n2_op_counts = record_count["op_counts"][1]
+        # Each op count is a vector [<table> <op> <count>]
+        [op1_uniq, op2_uniq] = list_diff(n1_op_counts, n2_op_counts)
+        record_count["record_count_diffs"] = [op1_uniq, op2_uniq]
+
+    with open("compared_record_counts_20220620_20220626.json", "w") as fout:
+        json.dump(records_counts, fout)
+
+    # Create a simple fixed record count listing (not a before/after comparison)
+    # Look at the second item in each pair in records_counts
+    fixed_record_counts = []
+    for record_count in records_counts:
+        fixed_release_date = record_count["release_date"][1]
+        fixed_counts = record_count["op_counts"][1]
+        fixed_record_counts.append({
+            "release_date": fixed_release_date,
+            "op_counts": fixed_counts
+        })
+    with open("fixed_record_counts_20220620_20220626.json", "w") as fout:
+        json.dump(fixed_record_counts, fout)
+
+
+# Generate a mapping file based on a file of release notifications
+# with open("broad-dsp-clinvar_backup_20221201.txt") as f:
+#     notif_lines = f.readlines()
+# topic_notifs = [json.loads(line) for line in notif_lines]
+# # topic_notifs = topic_notifs[:20]
+# release_dir_mappings = release_to_dir_mapping(topic_notifs)
+# write_release_mappings("broad-dsp-clinvar_release_mappings.txt",
+#                        release_dir_mappings)
+
+
+# Validate that a file of release notifications matches what
+# is in the bucket for that release
+# regenerated_topic_notifs = regenerate_notifs(storage_client, topic_notifs)
+# validate_notifs_equal(topic_notifs, regenerated_topic_notifs)
+
+
+# Generate notifications based on a mappings file
+mapping_file = "broad-dsp-clinvar_release_mappings_FIXED.txt"
+generated_notifications_file = "broad-dsp-clinvar_generated_notifications.txt"
+release_dir_mappings = read_release_mappings(mapping_file)
+generated_notifications = release_dir_map_to_notifications(storage_client,
+                                                           bucket_name,
+                                                           release_dir_mappings)
+with open(generated_notifications_file, "w") as fout:
+    for notif in generated_notifications:
+        fout.write(json.dumps(notif))
+        fout.write("\n")
+
+
+# Validate that the generated notifications matches a file of the topic of those same mappings
+received_notifications_file = "broad-dsp-clinvar_backup_20221201.txt"
+with open(received_notifications_file) as f:
+    received_notifications = [json.loads(line.strip()) for line in f]
+assert len(received_notifications) == len(generated_notifications)
+exceptions = []
+for (received, generated) in zip(received_notifications, generated_notifications):
+    try:
+        validate_notifs_equal([received], [generated])
+    except Exception as e:
+        exceptions.append({
+            "received": received,
+            "generated": generated,
+            "exception": e
+        })
+
 
 # Check record counts in diffs
 # record_counts_20220403 = release_notification_file_record_counts(
