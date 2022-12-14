@@ -1,4 +1,4 @@
-stream-repair/broad-dsp-clinvar_release_mappings_FIXED_NOTES.txt2019-07-01    backdiff_20190701
+2019-07-01    backdiff_20190701
 2019-07-31    backdiff_20190731
 2019-09-02    backdiff_20190902
 
