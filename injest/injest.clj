@@ -183,6 +183,19 @@
   "The Google Cloud Storage URL for bucket operations."
   (str storage-url "b/"))
 
+(def ^:private _-? (set "_-"))
+(def ^:private digit? (set "0123456789"))
+(def ^:private lowercase? (set "abcdefghijklmnopqrstuvwxyz"))
+(def ^:private bucket-allowed? (into _-? (concat digit? lowercase?)))
+
+(s/def ::bucket-name
+  (s/and string?
+         (partial every? bucket-allowed?)
+         (complement (comp _-? first))
+         (complement (comp _-? last))
+         (comp (partial > 64) count)
+         (comp (partial <  2) count)))
+
 (defn ^:private parse-gs-url
   "Return BUCKET and OBJECT from a gs://bucket/object URL."
   [url]
@@ -213,7 +226,25 @@
   ([url]
    (apply list-objects (parse-gs-url url))))
 
+(defn staged
+  "Return the staged ClinVarRelease.xml.gz objects from GCS."
+  []
+  (let [suffix "/xml/ClinVarRelease.xml.gz"]
+    (letfn [(release?  [o] (str/ends-with? (:name o) suffix))
+            (summarize [o] (select-keys o [:name :updated]))
+            (instify   [o] (update o :updated instant/read-instant-timestamp))]
+      (->> staging list-objects
+           (filter release?)
+           (map (comp instify summarize))))))
+
 (comment
+  (def wtf (list-objects staging "/"))
+  (let [[bucket prefix] (parse-gs-url staging)]
+    (list-objects bucket "/"))
+  (list-objects (str staging "/"))
+  (parse-gs-url "gs://bucket/")
+  (def xmls (staged))
+  (count xmls)
   (->> staging parse-gs-url)
   (->> ["pub" "clinvar" "xml" "clinvar_variation" "weekly_release"]
        (apply fetch)
@@ -225,6 +256,8 @@
     (->> staging list-objects
          (map #(select-keys % [:name :updated]))
          (filter #(str/ends-with? (:name %) "/xml/ClinVarRelease.xml.gz"))))
+  (instant/read-instant-date "2018-12-14 09:17")
+  (instant/read-instant-date "2022-12-12 04:43:54")
   (count xmls)
   ;; => 426
   (instant/read-instant-date "2021-11-03T00:01:53.859Z")
