@@ -216,7 +216,7 @@
   []
   (->> ["pub" "clinvar" "xml" "clinvar_variation" "weekly_release"]
        (apply fetch)
-       parse))
+       parse-ftp))
 
 (comment
   "gs://broad-dsp-monster-clingen-prod-staging-storage/20221214T010000/"
