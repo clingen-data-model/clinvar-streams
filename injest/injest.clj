@@ -30,6 +30,11 @@
   "FTP site of the National Library of Medicine."
   "https://ftp.ncbi.nlm.nih.gov")
 
+(def ^:private weekly-url
+  "The weekly_release URL."
+  (str/join "/" [ftp-site
+                 "pub" "clinvar" "xml" "clinvar_variation" "weekly_release"]))
+
 (def ^:private staging-bucket
   "Name of the bucket where Monster ingest stages the ClinVar files."
   "broad-dsp-monster-clingen-prod-staging-storage")
@@ -59,32 +64,32 @@
 (defn ^:private clinvar_releases_pre_20221027
   "Return the TSV file as a sequence of maps."
   []
-  (-> "./clinvar_releases_pre_20221027.tsv"
+  (-> "./injest/clinvar_releases_pre_20221027.tsv"
       tabulate mapulate))
 
-(defn ^:private fetch
-  "Return STUFF from FTP-SITE as a hicory tree."
-  [& stuff]
+(defn ^:private fetch-ftp
+  "Return the FTP site at the HTTP URL as a hicory tree."
+  [url]
   (-> {:as     :text
        :method :get
-       :url    (str/join "/" (into [ftp-site] stuff))}
+       :url    url}
       http/request deref :body html/parse html/as-hickory))
 
 (def ^:private ftp-time
   "This is how the FTP site timestamps."
   (SimpleDateFormat. "yyyy-MM-dd kk:mm:ss"))
 
+(def ^:private ftp-time-ymdhm
+  "And sometimes THIS is how the FTP site timestamps."
+  (SimpleDateFormat. "yyyy-MM-dd kk:mm"))
+
 (defn ^:private instify
   "Parse string S as a date and return its Instant or NIL."
   [s]
   (try (.parse ftp-time s) (catch Throwable _)))
 
-(def ^:private ftp-time-ymdhm
-  "And sometimes THIS is how the FTP site timestamps."
-  (SimpleDateFormat. "yyyy-MM-dd kk:mm"))
-
 (defn ^:private instify-ymdhm
-  "Parse string S as a date and return its Instant or NIL."
+  "Parse string S as a date differently and return its Instant or NIL."
   [s]
   (try (.parse ftp-time-ymdhm s) (catch Throwable _)))
 
@@ -165,9 +170,9 @@
 ;; Wrap an authorization header around Bearer TOKEN.
 ;;
 (defn ^:private auth-header
-  []
-  {"Authorization"
-   (str/join \space ["Bearer" (shell "gcloud" "auth" "print-access-token")])})
+  "Return an Authorization header map with bearer TOKEN."
+  [token]
+  {"Authorization" (str/join \space ["Bearer" token])})
 
 (def ^:private api-url
   "The Google Cloud API URL."
@@ -184,15 +189,18 @@
 (defn ^:private list-prefixes
   "Return all names in BUCKET with PREFIX in a lazy sequence."
   ([bucket prefix]
-   (let [params {:delimiter "/" :maxResults 999 :prefix prefix}]
+   (let [params  {:delimiter "/" :maxResults 999 :prefix prefix}
+         token   (shell "gcloud" "auth" "print-access-token")
+         request {:as           :stream
+                  :content-type :application/json
+                  :headers      (auth-header token)
+                  :method       :get
+                  :query-params params
+                  :url          (str bucket-url bucket "/o")}]
      (letfn [(each [pageToken]
                (let [{:keys [nextPageToken prefixes]}
-                     (-> {:as           :stream
-                          :content-type :application/json
-                          :headers      (auth-header)
-                          :method       :get
-                          :url          (str bucket-url bucket "/o")
-                          :query-params (assoc params :pageToken pageToken)}
+                     (-> request
+                         (assoc-in [:query-params :pageToken] pageToken)
                          http/request deref :body io/reader parse-json)]
                  (lazy-cat prefixes
                            (when nextPageToken (each nextPageToken)))))]
@@ -200,38 +208,98 @@
   ([bucket]
    (list-prefixes bucket "")))
 
-(defn staged
-  "Return timestamps from prefixes in STAGING-BUCKET."
-  []
+(defn latest-staged
+  "Return the latest timestamp from staging BUCKET."
+  [bucket]
   (let [regex #"^(\d\d\d\d)(\d\d)(\d\d)T(\d\d)(\d\d)(\d\d)/$"]
     (letfn [(instify [prefix]
               (let [[ok YYYY MM DD hh mm ss] (re-matches regex prefix)]
                 (when ok
                   (instant/read-instant-timestamp
                    (str YYYY \- MM \- DD \T hh \: mm \: ss)))))]
-      (->> staging-bucket list-prefixes (map instify)))))
+      (->> bucket list-prefixes (map instify) sort last))))
 
-(defn released
-  "Return clinvar_variation/weekly_release information from FTP-SITE."
-  []
-  (->> ["pub" "clinvar" "xml" "clinvar_variation" "weekly_release"]
-       (apply fetch)
-       parse-ftp))
+(defn ftp-since
+  "Return files from WEEKLY-URL more recent than INSTANT."
+  [instant]
+  (letfn [(since? [file]
+            (apply < (map inst-ms [instant (file "Last Modified")])))]
+    (->> weekly-url fetch-ftp parse-ftp rest (filter since?))))
+
+(def ^:private slack-manifest
+  "The Slack Application manifiest for ClinVar FTP Watcher."
+  (let [long (str/join \space ["Notify the genegraph-dev team"
+                               "when new files show up in the"
+                               weekly-url
+                               "FTP site"
+                               "before the Monster Ingest team notices."])]
+    {:_metadata
+     {:major_version 1
+      :minor_version 1}
+     :display_information
+     {:background_color "#006db6"       ; Broad blue
+      :description      "Tell us when new files show up in the FTP site."
+      :long_description long
+      :name             "ClinVar FTP Watcher"},
+     #_#_
+     :settings
+     {:is_hosted              false
+      :org_deploy_enabled     false
+      :socket_mode_enabled    false
+      :token_rotation_enabled false}}))
+
+;; More information on the meaning of error responses:
+;; https://api.slack.com/methods/chat.postMessage#errors
+;;
+(defn ^:private post-slack-message
+  "Post MESSAGE to CHANNEL with link unfurling disabled."
+  [channel message]
+  (let [token   (System/getenv "INJEST_SLACK_TOKEN")
+        body    (json/write-str {:channel      channel
+                                 :text         message
+                                 :unfurl_links false
+                                 :unfurl_media false})]
+    (-> {:as           :stream
+         :body         body
+         :content-type :application/json
+         :headers      (auth-header token)
+         :method       :post
+         :url          "https://slack.com/api/chat.postMessage"}
+        http/request deref :body io/reader parse-json)))
+
+;; Slack API has its own way of reporting statuses:
+;; https://api.slack.com/web#slack-web-api__evaluating-responses
+;;
+(defn ^:private post-slack-message-or-throw
+  "Post `message` to `channel` and throw if response indicates a failure."
+  [channel message]
+  (let [response (post-slack-message channel message)]
+    (when-not (:ok response)
+      (throw (ex-info "Slack API chat.postMessage failed"
+                      {:channel  channel
+                       :message  message
+                       :response response})))
+    response))
+
+(defn make-message
+  "Return a Slack message to report FILES newer than TIMESTAMP."
+  [timestamp files]
+  {:staged timestamp
+   :newer  files})
+
+(defn -main
+  [& args]
+  (let [[verb & more] args]
+    (case verb
+      "test" (let [staged (latest-staged)]
+               (pprint {:staged staged
+                        :newer  (ftp-since staged)}))
+      (pprint "help"))))
 
 (comment
-  "gs://broad-dsp-monster-clingen-prod-staging-storage/20221214T010000/"
-  {"Name" "ClinVarVariationRelease_2022-1211.xml.gz",
-   "Size" 2235469492,
-   "Released" #inst "2022-12-12T09:43:54.000-00:00",
-   "Last Modified" #inst "2022-12-12T09:43:54.000-00:00"}
-  (->> ["pub" "clinvar" "xml" "clinvar_variation" "weekly_release"]
-       (apply fetch)
-       parse)
-  (->> ["pub" "clinvar"]
-       (apply fetch)
-       parse)
-  (def xmls
-    (->> staging list-objects
-         (map #(select-keys % [:name :updated]))
-         (filter #(str/ends-with? (:name %) "/xml/ClinVarRelease.xml.gz"))))
-  tbl)
+"gs://broad-dsp-monster-clingen-prod-staging-storage/20221214T010000/"
+{"Name" "ClinVarVariationRelease_2022-1211.xml.gz",
+ "Size" 2235469492,
+ "Released" #inst "2022-12-12T09:43:54.000-00:00",
+ "Last Modified" #inst "2022-12-12T09:43:54.000-00:00"}
+tbl)
