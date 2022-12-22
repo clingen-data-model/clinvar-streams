@@ -5,7 +5,6 @@
             :url "https://www.eclipse.org/legal/epl-2.0/"}
   :dependencies [[org.clojure/clojure "1.11.1"]
                  [org.clojure/core.async "1.6.673"]
-                 [org.clojure/data.csv "1.0.1"]
                  [org.clojure/data.json "2.4.0"]
                  [org.clojure/java.jdbc "0.7.12"]
                  [org.clojure/tools.cli "1.0.214"]
@@ -20,7 +19,6 @@
                  [com.taoensso/timbre "6.0.3"]
                  [digest/digest "1.4.10"]
                  [fundingcircle/jackdaw "0.9.4"]
-                 [http-kit/http-kit "2.6.0"]
                  [io.pedestal/pedestal.jetty "0.5.8"]
                  [io.pedestal/pedestal.route "0.5.8"]
                  [io.pedestal/pedestal.service "0.5.8"]
