@@ -1,0 +1,18 @@
+;; Later versions through 0.9.8 of jackdaw do not compile.
+;; Compiling clinvar-streams.core
+;; Syntax error macroexpanding at (data.clj:93:1).
+;; Execution error (ClassNotFoundException) at java.net.URLClassLoader/findClass (URLClassLoader.java:445).
+;; org.apache.kafka.streams.test.TestRecord
+;;
+{:description "Monitor the ClinVar FTP site for new files."
+ :url       "https://github.com/clingen-data-model/clinvar-streams/injest"
+ :license   {:name "EPL-2.0 OR GPL-2.0-or-later WITH Classpath-exception-2.0"
+             :url "https://www.eclipse.org/legal/epl-2.0/"}
+ :mvn/repos {"central"   {:url "https://repo1.maven.org/maven2"}
+             "clojars"   {:url "https://clojars.org/repo"}}
+ :deps      {org.clojure/clojure     {:mvn/version "1.11.1"}
+             org.clojure/data.csv    {:mvn/version "1.0.1"}
+             org.clojure/data.json   {:mvn/version "2.4.0"}
+             http-kit/http-kit       {:mvn/version "2.6.0"}
+             org.clj-commons/hickory {:mvn/version "0.7.3" }}
+ :paths     ["."]}
