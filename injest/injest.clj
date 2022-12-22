@@ -297,9 +297,12 @@
       (pprint "help"))))
 
 (comment
-"gs://broad-dsp-monster-clingen-prod-staging-storage/20221214T010000/"
-{"Name" "ClinVarVariationRelease_2022-1211.xml.gz",
- "Size" 2235469492,
- "Released" #inst "2022-12-12T09:43:54.000-00:00",
- "Last Modified" #inst "2022-12-12T09:43:54.000-00:00"}
-tbl)
+  "https://sparkofreason.github.io/jvm-clojure-google-cloud-function/"
+  "https://github.com/google-github-actions/get-secretmanager-secrets"
+  "https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#onschedule"
+  "gs://broad-dsp-monster-clingen-prod-staging-storage/20221214T010000/"
+  {"Name" "ClinVarVariationRelease_2022-1211.xml.gz",
+   "Size" 2235469492,
+   "Released" #inst "2022-12-12T09:43:54.000-00:00",
+   "Last Modified" #inst "2022-12-12T09:43:54.000-00:00"}
+  tbl)
