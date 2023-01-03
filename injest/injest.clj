@@ -10,7 +10,8 @@
             [hickory.core       :as html]
             [hickory.select     :as css]
             [org.httpkit.client :as http])
-  (:import [java.text SimpleDateFormat]))
+  (:import [java.text SimpleDateFormat]
+           [java.util Date]))
 
 (defmacro dump
   "Dump [EXPRESSION VALUE] where VALUE is EXPRESSION's value."
@@ -30,6 +31,8 @@
   "FTP site of the National Library of Medicine."
   "https://ftp.ncbi.nlm.nih.gov")
 
+;; The FTP/HTTP server requires a final / on URLs.
+;;
 (def ^:private weekly-url
   "The weekly_release URL."
   (str/join
@@ -249,21 +252,37 @@
       :socket_mode_enabled    false
       :token_rotation_enabled false}}))
 
+(defn getenv
+  "Throw or return the value of environment VARIABLE in process."
+  [variable]
+  (let [result (System/getenv variable)]
+    (when-not result
+      (throw (ex-info (format "Set the %s environment variable" variable) {})))
+    result))
+
+(def slack-channel
+  "Post messages to this Slack channel."
+  (delay (getenv "CLINVAR_FTP_WATCHER_SLACK_CHANNEL")))
+
+(def slack-bot
+  "This is the Slack Bot token."
+  (delay (getenv "CLINVAR_FTP_WATCHER_SLACK_BOT")))
+
 ;; More information on the meaning of error responses:
 ;; https://api.slack.com/methods/chat.postMessage#errors
 ;;
 (defn ^:private post-slack-message
   "Post MESSAGE to CHANNEL with link unfurling disabled."
-  [channel message]
-  (let [token   (System/getenv "INJEST_SLACK_TOKEN")
-        body    (json/write-str {:channel      channel
-                                 :text         message
-                                 :unfurl_links false
-                                 :unfurl_media false})]
+  [message]
+  (let [body (json/write-str {:channel      @slack-channel
+                              :text         message
+                              :unfurl_links false
+                              :unfurl_media false})]
     (-> {:as           :stream
          :body         body
          :content-type :application/json
-         :headers      (auth-header token)
+         :headers      (assoc (auth-header @slack-bot)
+                              "Content-type" "application/json")
          :method       :post
          :url          "https://slack.com/api/chat.postMessage"}
         http/request deref :body io/reader parse-json)))
@@ -273,12 +292,11 @@
 ;;
 (defn ^:private post-slack-message-or-throw
   "Post `message` to `channel` and throw if response indicates a failure."
-  [channel message]
-  (let [response (post-slack-message channel message)]
+  [message]
+  (let [response (post-slack-message message)]
     (when-not (:ok response)
       (throw (ex-info "Slack API chat.postMessage failed"
-                      {:channel  channel
-                       :message  message
+                      {:message  message
                        :response response})))
     response))
 
@@ -290,17 +308,17 @@
 
 (defn -main
   [& args]
-  (let [[verb & more] args]
+  (let [[verb & more] args
+        now           (Date.)
+        staged        (latest-staged staging-bucket)
+        staged        #inst "2022-12-26T01:00:00.000000000-00:00"
+        newer         (ftp-since staged)
+        result        {:now now :staged staged :newer newer}]
     (case verb
-      "test"  (let [staged (latest-staged staging-bucket)
-                    staged #inst "2022-12-26T01:00:00.000000000-00:00"
-                    result {:staged staged :newer (ftp-since staged)}]
-                (pprint result))
-      "slack" (let [staged (latest-staged staging-bucket)
-                    staged #inst "2022-12-26T01:00:00.000000000-00:00"
-                    result {:staged staged :newer (ftp-since staged)}]
-                (pprint result))
-      (pprint "help"))))
+      "test"  (pprint result)
+      "slack" (post-slack-message-or-throw result)
+      (pprint "help"))
+    (System/exit 0)))
 
 (comment
   "https://sparkofreason.github.io/jvm-clojure-google-cloud-function/"
@@ -313,5 +331,28 @@
    "Released" #inst "2022-12-12T09:43:54.000-00:00",
    "Last Modified" #inst "2022-12-12T09:43:54.000-00:00"}
   "https://ftp.ncbi.nlm.nih.gov/pub/clinvar/xml/clinvar_variation/weekly_release/"
+  "https://console.cloud.google.com/security/secret-manager/"
+  "https://cloud.google.com/secret-manager/docs/reference/rpc/google.cloud.secrets.v1beta1#createsecretrequest"
   (-main "test")
   tbl)
+
+(concat
+ (list "a")
+ (list "b"))
+
+(defmacro make [keywords]
+  `(let [args# (map list (repeat 'list) ~keywords)]
+     (concat args#)))
+;; => #'injest/make
+
+(macroexpand '(make [:a :b :c]))
+;; => (let*
+;;     [args__10286__auto__
+;;      (clojure.core/map
+;;       clojure.core/list
+;;       (clojure.core/repeat 'clojure.core/list)
+;;       [:a :b :c])]
+;;     (clojure.core/concat args__10286__auto__))
+
+(make [:a :b :c])
+;; => ((clojure.core/list :a) (clojure.core/list :b) (clojure.core/list :c))
