@@ -32,8 +32,9 @@
 
 (def ^:private weekly-url
   "The weekly_release URL."
-  (str/join "/" [ftp-site
-                 "pub" "clinvar" "xml" "clinvar_variation" "weekly_release"]))
+  (str/join
+   "/"
+   [ftp-site "pub" "clinvar" "xml" "clinvar_variation" "weekly_release" ""]))
 
 (def ^:private staging-bucket
   "Name of the bucket where Monster ingest stages the ClinVar files."
@@ -291,18 +292,26 @@
   [& args]
   (let [[verb & more] args]
     (case verb
-      "test" (let [staged (latest-staged)]
-               (pprint {:staged staged
-                        :newer  (ftp-since staged)}))
+      "test"  (let [staged (latest-staged staging-bucket)
+                    staged #inst "2022-12-26T01:00:00.000000000-00:00"
+                    result {:staged staged :newer (ftp-since staged)}]
+                (pprint result))
+      "slack" (let [staged (latest-staged staging-bucket)
+                    staged #inst "2022-12-26T01:00:00.000000000-00:00"
+                    result {:staged staged :newer (ftp-since staged)}]
+                (pprint result))
       (pprint "help"))))
 
 (comment
   "https://sparkofreason.github.io/jvm-clojure-google-cloud-function/"
   "https://github.com/google-github-actions/get-secretmanager-secrets"
   "https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#onschedule"
+  "https://pathom3.wsscode.com/docs/tutorials/serverless-pathom-gcf/"
   "gs://broad-dsp-monster-clingen-prod-staging-storage/20221214T010000/"
   {"Name" "ClinVarVariationRelease_2022-1211.xml.gz",
    "Size" 2235469492,
    "Released" #inst "2022-12-12T09:43:54.000-00:00",
    "Last Modified" #inst "2022-12-12T09:43:54.000-00:00"}
+  "https://ftp.ncbi.nlm.nih.gov/pub/clinvar/xml/clinvar_variation/weekly_release/"
+  (-main "test")
   tbl)
