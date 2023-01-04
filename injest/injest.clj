@@ -224,11 +224,11 @@
       (->> bucket list-prefixes (map instify) sort last))))
 
 (defn ftp-since
-  "Return files from WEEKLY-URL more recent than INSTANT."
+  "Return files from WEEKLY-URL more recent than INSTANT in a vector."
   [instant]
   (letfn [(since? [file]
             (apply < (map inst-ms [instant (file "Last Modified")])))]
-    (->> weekly-url fetch-ftp parse-ftp rest (filter since?))))
+    (->> weekly-url fetch-ftp parse-ftp rest (filter since?) vec)))
 
 (def ^:private slack-manifest
   "The Slack Application manifiest for ClinVar FTP Watcher."
@@ -264,27 +264,28 @@
   "Post messages to this Slack channel."
   (delay (getenv "CLINVAR_FTP_WATCHER_SLACK_CHANNEL")))
 
-(def slack-bot
+(def slack-bot-token
   "This is the Slack Bot token."
-  (delay (getenv "CLINVAR_FTP_WATCHER_SLACK_BOT")))
+  (delay (getenv "CLINVAR_FTP_WATCHER_SLACK_BOT_TOKEN")))
 
 ;; More information on the meaning of error responses:
 ;; https://api.slack.com/methods/chat.postMessage#errors
 ;;
 (defn ^:private post-slack-message
-  "Post MESSAGE to CHANNEL with link unfurling disabled."
-  [message]
-  (let [body (json/write-str {:channel      @slack-channel
-                              :text         message
-                              :unfurl_links false
-                              :unfurl_media false})]
-    (-> {:as           :stream
-         :body         body
-         :content-type :application/json
-         :headers      (assoc (auth-header @slack-bot)
-                              "Content-type" "application/json")
-         :method       :post
-         :url          "https://slack.com/api/chat.postMessage"}
+  "Post EDN message to CHANNEL with link unfurling disabled."
+  [edn]
+  (let [ticks   "```"
+        message (str ticks (with-out-str (pprint edn)) ticks)
+        body    (json/write-str {:channel      @slack-channel
+                                 :text         message
+                                 :unfurl_links false
+                                 :unfurl_media false})
+        auth (auth-header @slack-bot-token)]
+    (-> {:as      :stream
+         :body    body
+         :headers (assoc auth "Content-type" "application/json")
+         :method  :post
+         :url     "https://slack.com/api/chat.postMessage"}
         http/request deref :body io/reader parse-json)))
 
 ;; Slack API has its own way of reporting statuses:
@@ -333,26 +334,9 @@
   "https://ftp.ncbi.nlm.nih.gov/pub/clinvar/xml/clinvar_variation/weekly_release/"
   "https://console.cloud.google.com/security/secret-manager/"
   "https://cloud.google.com/secret-manager/docs/reference/rpc/google.cloud.secrets.v1beta1#createsecretrequest"
+  "clj -M -m injest slack"
+  "https://stackoverflow.com/questions/58409161/channel-not-found-error-while-sending-a-message-to-myself"
+  "https://github.com/broadinstitute/tgg-terraform-modules/tree/main/scheduled-cloudfunction"
   (-main "test")
+  (-main "slack")
   tbl)
-
-(concat
- (list "a")
- (list "b"))
-
-(defmacro make [keywords]
-  `(let [args# (map list (repeat 'list) ~keywords)]
-     (concat args#)))
-;; => #'injest/make
-
-(macroexpand '(make [:a :b :c]))
-;; => (let*
-;;     [args__10286__auto__
-;;      (clojure.core/map
-;;       clojure.core/list
-;;       (clojure.core/repeat 'clojure.core/list)
-;;       [:a :b :c])]
-;;     (clojure.core/concat args__10286__auto__))
-
-(make [:a :b :c])
-;; => ((clojure.core/list :a) (clojure.core/list :b) (clojure.core/list :c))
