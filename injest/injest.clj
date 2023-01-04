@@ -3,14 +3,14 @@
   (:require [clojure.data.json  :as json]
             [clojure.instant    :as instant]
             [clojure.java.io    :as io]
-            [clojure.java.shell :as shell]
             [clojure.pprint     :refer [pprint]]
             [clojure.spec.alpha :as s]
             [clojure.string     :as str]
             [hickory.core       :as html]
             [hickory.select     :as css]
             [org.httpkit.client :as http])
-  (:import [java.text SimpleDateFormat]
+  (:import [com.google.auth.oauth2 GoogleCredentials]
+           [java.text SimpleDateFormat]
            [java.util Date]))
 
 (defmacro dump
@@ -35,9 +35,7 @@
 ;;
 (def ^:private weekly-url
   "The weekly_release URL."
-  (str/join
-   "/"
-   [ftp-site "pub" "clinvar" "xml" "clinvar_variation" "weekly_release" ""]))
+  "https://ftp.ncbi.nlm.nih.gov/pub/clinvar/xml/clinvar_variation/weekly_release/")
 
 (def ^:private staging-bucket
   "Name of the bucket where Monster ingest stages the ClinVar files."
@@ -162,15 +160,6 @@
            mapulate
            (map fix-ftp-map)))))
 
-(defn ^:private shell
-  "Run ARGS in a shell and return stdout or throw."
-  [& args]
-  (let [{:keys [exit err out]} (apply shell/sh args)]
-    (when-not (zero? exit)
-      (throw (ex-info (format "injest: %s exit status from: %s : %s"
-                              exit args err))))
-    (str/trim out)))
-
 ;; Wrap an authorization header around Bearer TOKEN.
 ;;
 (defn ^:private auth-header
@@ -190,14 +179,20 @@
   "The Google Cloud Storage URL for bucket operations."
   (str storage-url "b/"))
 
+(def ^:private google-adc-token
+  "Nil or a token for the Application Default Credentials."
+  (some-> (GoogleCredentials/getApplicationDefault)
+          (.createScoped
+           ["https://www.googleapis.com/auth/devstorage.read_only"])
+          .refreshAccessToken .getTokenValue delay))
+
 (defn ^:private list-prefixes
   "Return all names in BUCKET with PREFIX in a lazy sequence."
   ([bucket prefix]
    (let [params  {:delimiter "/" :maxResults 999 :prefix prefix}
-         token   (shell "gcloud" "auth" "print-access-token")
          request {:as           :stream
                   :content-type :application/json
-                  :headers      (auth-header token)
+                  :headers      (auth-header @google-adc-token)
                   :method       :get
                   :query-params params
                   :url          (str bucket-url bucket "/o")}]
@@ -274,8 +269,7 @@
 (defn ^:private post-slack-message
   "Post EDN message to CHANNEL with link unfurling disabled."
   [edn]
-  (let [ticks   "```"
-        message (str ticks (with-out-str (pprint edn)) ticks)
+  (let [message (format "```%s```" (with-out-str (pprint edn)))
         body    (json/write-str {:channel      @slack-channel
                                  :text         message
                                  :unfurl_links false
@@ -311,7 +305,7 @@
         result        {:now now :staged staged :newer newer}]
     (case verb
       "test"  (pprint result)
-      "slack" (post-slack-message-or-throw result)
+      "slack" (pprint (post-slack-message-or-throw result))
       (pprint "help"))
     (System/exit 0)))
 
