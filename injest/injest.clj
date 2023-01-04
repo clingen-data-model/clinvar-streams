@@ -283,7 +283,7 @@
         auth (auth-header @slack-bot-token)]
     (-> {:as      :stream
          :body    body
-         :headers (assoc auth "Content-type" "application/json")
+         :headers (assoc auth "Content-type" "application/json;charset=utf-8")
          :method  :post
          :url     "https://slack.com/api/chat.postMessage"}
         http/request deref :body io/reader parse-json)))
@@ -301,18 +301,12 @@
                        :response response})))
     response))
 
-(defn make-message
-  "Return a Slack message to report FILES newer than TIMESTAMP."
-  [timestamp files]
-  {:staged timestamp
-   :newer  files})
-
 (defn -main
   [& args]
   (let [[verb & more] args
         now           (Date.)
         staged        (latest-staged staging-bucket)
-        staged        #inst "2022-12-26T01:00:00.000000000-00:00"
+        staged        #inst "2023-01-02"
         newer         (ftp-since staged)
         result        {:now now :staged staged :newer newer}]
     (case verb
