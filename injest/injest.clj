@@ -3,6 +3,7 @@
   (:require [clojure.data.json  :as json]
             [clojure.instant    :as instant]
             [clojure.java.io    :as io]
+            [clojure.java.shell :as shell]
             [clojure.pprint     :refer [pprint]]
             [clojure.spec.alpha :as s]
             [clojure.string     :as str]
@@ -10,8 +11,11 @@
             [hickory.select     :as css]
             [org.httpkit.client :as http])
   (:import [com.google.auth.oauth2 GoogleCredentials]
+           [com.google.cloud.functions CloudEventsFunction]
+           [io.cloudevents CloudEvent]
            [java.text SimpleDateFormat]
-           [java.util Date]))
+           [java.util Date])
+  (:gen-class))
 
 (defmacro dump
   "Dump [EXPRESSION VALUE] where VALUE is EXPRESSION's value."
@@ -35,11 +39,22 @@
 ;;
 (def ^:private weekly-url
   "The weekly_release URL."
-  "https://ftp.ncbi.nlm.nih.gov/pub/clinvar/xml/clinvar_variation/weekly_release/")
+  (str/join
+   "/"
+   [ftp-site "pub" "clinvar" "xml" "clinvar_variation" "weekly_release" ""]))
 
 (def ^:private staging-bucket
   "Name of the bucket where Monster ingest stages the ClinVar files."
   "broad-dsp-monster-clingen-prod-staging-storage")
+
+(defn ^:private shell
+  "Run ARGS in a shell and return stdout or throw."
+  [& args]
+  (let [{:keys [exit err out]} (apply shell/sh args)]
+    (when-not (zero? exit)
+      (throw (ex-info (format "injest: %s exit status from: %s : %s"
+                              exit args err))))
+    (str/trim out)))
 
 (defn parse-json
   "Parse STREAM as JSON or print it."
@@ -296,7 +311,30 @@
                        :response response})))
     response))
 
+
+;; gcloud scheduler jobs doesn't get its --location default from config!
+;;
+(defn ^:private deploy
+  "Deploy this thing."
+  [& args]
+  (let [project  "clingen-dev"
+        region   "us-central1"
+        schedule "23 * * * *"
+        watcher  "clinvar-ftp-watcher"
+        gclouds  [["config" "set" "core/project" project]
+                  ["config" "set" "compute/region" region]
+                  ["config" "set" "artifacts/location" region]
+                  ["pubsub" "topics" "create" watcher]
+                  ["pubsub" "subscriptions" "create" watcher "--topic" watcher]
+                  ["scheduler" "jobs" "create" "pubsub" watcher
+                   "--location" region "--topic" watcher "--schedule" schedule
+                   "--message-body" "PING"]
+                  ["pubsub" "topics" "publish" watcher "--message" "PING"]]]
+    (letfn [(gcloud [args] (apply shell (into ["gcloud"] args)))]
+      (map gcloud gclouds))))
+
 (defn -main
+  "Run VERB, perhaps passing it MORE as arguments."
   [& args]
   (let [[verb & more] args
         now           (Date.)
@@ -305,27 +343,29 @@
         newer         (ftp-since staged)
         result        {:now now :staged staged :newer newer}]
     (case verb
-      "test"  (pprint result)
-      "slack" (pprint (post-slack-message-or-throw result))
+      "deploy" (apply deploy more)
+      "slack"  (pprint (post-slack-message-or-throw result))
+      "test"   (pprint result)
       (pprint "help"))
     (System/exit 0)))
 
+(def wtf
+  (reify CloudEventsFunction
+    (^void accept [this ^CloudEvent cloudevent]
+     (dump this)
+     (dump cloudevent)
+     (let [event (-> cloudevent .getData .toBytes slurp)]
+       (-main "slack" event)))))
+
 (comment
   "https://sparkofreason.github.io/jvm-clojure-google-cloud-function/"
-  "https://github.com/google-github-actions/get-secretmanager-secrets"
-  "https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#onschedule"
-  "https://pathom3.wsscode.com/docs/tutorials/serverless-pathom-gcf/"
-  "gs://broad-dsp-monster-clingen-prod-staging-storage/20221214T010000/"
-  {"Name" "ClinVarVariationRelease_2022-1211.xml.gz",
-   "Size" 2235469492,
-   "Released" #inst "2022-12-12T09:43:54.000-00:00",
-   "Last Modified" #inst "2022-12-12T09:43:54.000-00:00"}
-  "https://ftp.ncbi.nlm.nih.gov/pub/clinvar/xml/clinvar_variation/weekly_release/"
   "https://console.cloud.google.com/security/secret-manager/"
   "https://cloud.google.com/secret-manager/docs/reference/rpc/google.cloud.secrets.v1beta1#createsecretrequest"
   "clj -M -m injest slack"
   "https://stackoverflow.com/questions/58409161/channel-not-found-error-while-sending-a-message-to-myself"
   "https://github.com/broadinstitute/tgg-terraform-modules/tree/main/scheduled-cloudfunction"
+  "gcloud functions runtimes list --project=clingen-dev --region=us-central1"
+  "gcloud functions deploy clinvar-ftp-watcher --allow-unauthenticated --region=us-central1 --runtime=java17 --trigger-topic=clinvar-ftp-watcher --source=target --entry-point=sumthang"
   (-main "test")
   (-main "slack")
   tbl)
