@@ -181,10 +181,11 @@
 
 (def ^:private google-adc-token
   "Nil or a token for the Application Default Credentials."
-  (some-> (GoogleCredentials/getApplicationDefault)
-          (.createScoped
-           ["https://www.googleapis.com/auth/devstorage.read_only"])
-          .refreshAccessToken .getTokenValue delay))
+  (delay
+    (some-> (GoogleCredentials/getApplicationDefault)
+            (.createScoped
+             ["https://www.googleapis.com/auth/devstorage.read_only"])
+            .refreshAccessToken .getTokenValue)))
 
 (defn ^:private list-prefixes
   "Return all names in BUCKET with PREFIX in a lazy sequence."
