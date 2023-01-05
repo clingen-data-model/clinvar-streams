@@ -18,9 +18,14 @@
  {org.clojure/clojure                                {:mvn/version "1.11.1"}
   org.clojure/data.csv                               {:mvn/version "1.0.1"}
   org.clojure/data.json                              {:mvn/version "2.4.0"}
+  org.clojure/tools.build                            {:mvn/version "0.9.0"}
   com.google.auth/google-auth-library-oauth2-http    {:mvn/version "0.25.5"}
   com.google.cloud.functions/functions-framework-api {:mvn/version "1.0.4"}
   http-kit/http-kit                                  {:mvn/version "2.6.0"}
   org.clj-commons/hickory                            {:mvn/version "0.7.3" }}
  :paths
- ["."]}
+ ["."]
+ :aliases
+ {:build ; clj -T:build uber
+  {:deps {org.clojure/tools.build {:mvn/version "0.9.0"}}
+   :ns-default build}}}
