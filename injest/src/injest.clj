@@ -357,6 +357,20 @@
      (let [event (-> cloudevent .getData .toBytes slurp)]
        (-main "slack" event)))))
 
+(gen-class
+ :implements   [com.google.cloud.functions.CloudEventsFunction]
+ :name         injest.InjestCloudEventsFunction
+ :prefix       InjestCloudEventsFunction-)
+
+(defn InjestCloudEventsFunction-accept
+  [this ^CloudEvent cloudevent]
+  (dump this)
+  (dump cloudevent)
+  (let [event (-> cloudevent .getData .toBytes slurp)]
+    (dump event)
+    (-main "slack" event)))
+
+
 (comment
   "https://cloud.google.com/secret-manager/docs/reference/rpc/google.cloud.secrets.v1beta1#createsecretrequest"
   "clj -M -m injest slack"
