@@ -358,7 +358,6 @@
        (-main "slack" event)))))
 
 (comment
-  "https://sparkofreason.github.io/jvm-clojure-google-cloud-function/"
   "https://cloud.google.com/secret-manager/docs/reference/rpc/google.cloud.secrets.v1beta1#createsecretrequest"
   "clj -M -m injest slack"
   "https://stackoverflow.com/questions/58409161/channel-not-found-error-while-sending-a-message-to-myself"

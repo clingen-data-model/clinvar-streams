@@ -24,7 +24,6 @@
   [_]
   (let [{:keys [paths] :as basis} (b/create-basis defaults)
         project                   (assoc defaults :basis basis)]
-    (dump (:main defaults))
     (b/delete      project)
     (b/copy-dir    (assoc project :src-dirs paths))
     (b/compile-clj (assoc project
