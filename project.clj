@@ -26,7 +26,8 @@
                  [nrepl "0.8.3"]
                  [org.clojure/tools.namespace "1.1.0"]
                  [org.postgresql/postgresql "42.2.16"]
-                 [org.xerial/sqlite-jdbc "3.32.3.2"]]
+                 [org.xerial/sqlite-jdbc "3.32.3.2"]
+                 [http-kit/http-kit "2.6.0"]]
   :repl-options {:init-ns clinvar-raw.stream
                  :caught clojure.repl/pst
                  :jvm-opts ["-Xms256m"

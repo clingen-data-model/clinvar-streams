@@ -2,11 +2,13 @@
   (:require [cheshire.core :as json]
             [clinvar-raw.config :as config]
             [clinvar-raw.ingest :as ingest]
+            [clinvar-raw.gcpbucket :as gcs]
             [clinvar-streams.storage.rocksdb :as rocksdb]
             [clinvar-streams.stream-utils :refer [get-max-offset
                                                   get-min-offset]]
             [clojure.core.async :as async]
             [clojure.java.io :as io]
+            [clojure.spec.alpha :as spec]
             [jackdaw.client :as jc]
             [jackdaw.data :as jd]
             [mount.core :refer [defstate]]
@@ -248,59 +250,71 @@
               is-dup?))]
     (assoc msg :is-dup? (get-is-dup msg))))
 
+(defn process-file [storage-protocol release-date event]
+  (let [{:keys [bucket path order-entry event-type]} event]
+    (log/info :fn :generate-messages-from-diff/process-file 
+              :bucket bucket
+              :path path
+              :order-entry order-entry
+              :event-type event-type)
+    (let [reader-fn (partial construct-reader
+                             storage-protocol
+                             bucket
+                             path)]
+      (->> (lazy-line-reader-threaded reader-fn)
+           (map #(json/parse-string % true))
+           (filter-by-field (-> order-entry :filter :field)
+                            (-> order-entry :filter :value))
+           (map #(line-map-to-event %
+                                    (:type order-entry)
+                                    release-date
+                                    event-type))))))
+
+(defn process-files [storage-protocol release-date files-to-process]
+  (when (seq files-to-process)
+    (lazy-cat (process-file storage-protocol release-date (first files-to-process))
+              (process-files storage-protocol release-date (rest files-to-process)))))
+
 (defn generate-messages-from-diff
   "Takes a diff notification message, and returns a lazy seq of
    all the output messages in order for this diffed release."
   [parsed-diff-files-msg storage-protocol]
-  (log/debug :fn :generate-messages-from-diff
+  (log/info :fn :generate-messages-from-diff
              :parsed-diff-files-message parsed-diff-files-msg
              :storage-protocol storage-protocol)
   (let [release-date (:release_date parsed-diff-files-msg)]
-    (letfn [(process-file [{:keys [bucket path order-entry event-type]}]
-              (let [reader-fn (partial construct-reader
-                                       storage-protocol
-                                       bucket
-                                       path)]
-                (->> (lazy-line-reader-threaded reader-fn)
-                     (map #(json/parse-string % true))
-                     (filter-by-field (-> order-entry :filter :field)
-                                      (-> order-entry :filter :value))
-                     (map #(line-map-to-event %
-                                              (:type order-entry)
-                                              release-date
-                                              event-type)))))
-            (process-files [files-to-process]
-              (when (seq files-to-process)
-                (lazy-cat (process-file (first files-to-process))
-                          (process-files (rest files-to-process)))))]
-      (->> (for [procedure event-procedures]
-             (let [bucket (:bucket parsed-diff-files-msg)
-                   files (filter-files (:filter-string procedure) (:files parsed-diff-files-msg))]
-               (for [order-entry (:order procedure)
-                     file-path (filter-files (:type order-entry) files)]
-                 {:bucket bucket
-                  :path file-path
-                  :order-entry order-entry
-                  :event-type (:event-type procedure)})))
-           flatten-one-level
-           process-files))))
+    (->> (for [procedure event-procedures]
+           (let [bucket (:bucket parsed-diff-files-msg)
+                 file-list (or (:files parsed-diff-files-msg)
+                               (->> (str (:release_directory parsed-diff-files-msg) "/")
+                                    (gcs/list-all-files bucket)))
+                 files (filter-files (:filter-string procedure) file-list)]
+             (for [order-entry (:order procedure)
+                   file-path (filter-files (:type order-entry) files)]
+               {:bucket bucket
+                :path file-path
+                :order-entry order-entry
+                :event-type (:event-type procedure)})))
+         flatten-one-level
+         (process-files storage-protocol release-date)
+         #_(map #(process-file storage-protocol release-date %)))))
 
 (defn process-clinvar-drop
-  "Constructs a lazy sequence of output messages based on an input drop file
+    "Constructs a lazy sequence of output messages based on an input drop file
    from the upstream DSP service.
    Caller should avoid realizing whole sequence into memory."
-  ;; TODO SPEC
+    ;; TODO SPEC
   [msg {:keys [storage-protocol]
         :or {storage-protocol "gs://"}}]
-  ; 1. parse the drop message to determine where the files are
-  ; this will return the folder and bucket and file manifest
-  (log/info {:fn :process-clinvar-drop :msg "Processing drop message" :drop-message msg})
-  (let [parsed-drop-record (if (string? msg) (json/parse-string msg true) msg)
-        release-date (:release_date parsed-drop-record)]
-    (lazy-cat
-     [(create-sentinel-message release-date :start)]
-     (generate-messages-from-diff parsed-drop-record storage-protocol)
-     [(create-sentinel-message release-date :end)])))
+                                        ; 1. parse the drop message to determine where the files are
+                                        ; this will return the folder and bucket and file manifest
+    (log/info {:fn :process-clinvar-drop :msg "Processing drop message" :drop-message msg})
+    (let [parsed-drop-record (if (string? msg) (json/parse-string msg true) msg)
+          release-date (:release_date parsed-drop-record)]
+      (lazy-cat
+       [(create-sentinel-message release-date :start)]
+       (generate-messages-from-diff parsed-drop-record storage-protocol)
+       [(create-sentinel-message release-date :end)])))
 
 (defn consumer-lazy-seq-bounded
   "Consumes a single-partition topic.
@@ -360,20 +374,25 @@
   [m ks]
   (update-in m ks #(json/generate-string %)))
 
-(defn start [opts kafka-opts]
-  (let [output-topic (:DX_CV_RAW_OUTPUT_TOPIC opts)
+(defn start-streaming
+  "Continuously process DSP drop messages from input-topic and
+  process files from the storage bucket through to the output-topic
+  for downstream processing."
+  [opts kafka-opts]
+  (let [input-topic (:DX_CV_RAW_INPUT_TOPIC opts)
+        output-topic (:DX_CV_RAW_OUTPUT_TOPIC opts)
         max-input-count (:DX_CV_RAW_MAX_INPUT_COUNT opts)]
     (with-open [producer (jc/producer kafka-opts)
                 consumer (jc/consumer kafka-opts)]
-      (jc/subscribe consumer [{:topic-name (:DX_CV_RAW_INPUT_TOPIC opts)}])
+      (jc/subscribe consumer [{:topic-name input-topic}])
       (when (:KAFKA_RESET_CONSUMER_OFFSET opts)
         (log/info "Resetting to start of input topic")
         (jc/seek-to-beginning-eager consumer))
-      (log/info "Subscribed to consumer topic " (:DX_CV_RAW_INPUT_TOPIC opts))
+      (log/info "Subscribed to consumer topic " )
       (doseq [m (cond->> (consumer-lazy-seq-infinite consumer)
                   max-input-count (take max-input-count))
               :while @listening-for-drop]
-        (let [m-value (-> m :value (json/parse-string true))
+        (let [m-value (-> m :value (json/parse-string true)) ;; process-drop [drop-message]
               input-counter (atom 0)
               output-counter (atom 0)
               input-type-counters (atom {})
@@ -438,7 +457,8 @@
                  (assoc :KAFKA_RESET_CONSUMER_OFFSET true))
         kafka-config (-> (config/kafka-config opts)
                          (assoc  "group.id" "local-dev"))]
-    (start opts kafka-config)))
+    (start-streaming opts kafka-config)))
+
 
 (comment
   (reset-db)
@@ -454,8 +474,7 @@
       (log/info (str {:messages (into [] messages)}))
       (log/info (str {:deduped (into [] deduped)})))))
 
-
-(defn start-with-env []
+(defn start-with-env [args]
   (let [opts config/env-config
         kafka-opts (config/kafka-config opts)]
-    (start opts kafka-opts)))
+    (start-streaming opts kafka-opts)))
