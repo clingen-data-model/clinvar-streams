@@ -1,0 +1,22 @@
+# Cloud Build configuration for single relase based clinvar-stream
+#
+# Command line test usage:
+# gcloud builds submit --project=clingen-stage --config ./cloudbuild.yaml \
+#  --substitutions=COMMIT_SHA="testbuild" .
+
+steps:
+  # build code (we could cache this image as well, by pulling, and pushing at end)
+  - name: 'gcr.io/cloud-builders/docker'
+    args: [ 'build', '.',
+            '-f', 'docker/clinvar-streams.release.Dockerfile',
+            '-t', 'gcr.io/$PROJECT_ID/clinvar-streams:$COMMIT_SHA' ]
+
+# push the images
+# The builder image is not pushed, because is will almost certainly
+# change any time a file change occurs in the source tree, so it is
+# not useful to cache it in the registry.
+images:
+  - 'gcr.io/$PROJECT_ID/clinvar-streams:$COMMIT_SHA'
+
+# timeout if not complete in 30 minutes
+timeout: 1800s

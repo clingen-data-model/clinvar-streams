@@ -20,8 +20,12 @@
    {:fname (str (:CLINVAR_STREAMS_DATA_DIR env-config)
                 "logs/clinvar-streams.log")}))
 
-(timbre/swap-config!
- #(update % :appenders merge {:file appender}))
+(defn single-release-run? []
+  (contains? streams-config/env-config :RELEASE_DIRECTORY))
+
+(when (not single-release-run?)
+  (timbre/swap-config!
+   #(update % :appenders merge {:file appender})))
 
 (defn kafka-config
   "Uses :KAFKA_USER :KAFKA_PASSWORD, :KAFKA_HOST :KAFKA_GROUP in opts."
