@@ -81,7 +81,7 @@
                         http/request deref :body io/reader (json/parse-stream true))]
                 (if (some? error)
                   (throw (ex-info (str "Exception expanding items in storage bucket '" bucket
-                                        "' from '" prefix "'.") {:error error}))
+                                       "' from '" prefix "'.") {:error error}))
                   (lazy-cat (map :name items)
                             (when nextPageToken
                               (get-cloud-storage-items nextPageToken))))))]
@@ -94,7 +94,7 @@
   (loop [prefixes (list-prefixes bucket prefix)]
     (let [new-prefixes (flatten (map #(list-prefixes bucket %) prefixes))]
       (if (not (empty? new-prefixes))
-        (recur new-prefixes)        
+        (recur new-prefixes)
         prefixes))))
 
 (defn list-all-files
@@ -103,4 +103,3 @@
   (->> (expand-all-prefixes bucket prefix)
        (map #(list-items bucket %))
        flatten))
-
