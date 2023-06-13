@@ -69,6 +69,9 @@
   (log/debugf "Opening gs://%s/%s" bucket filename)
   (let [blob-id (BlobId/of bucket filename)
         blob (.get gc-storage blob-id)]
+    (when (nil? blob)
+      (throw (java.io.FileNotFoundException.
+              (str "GCS blob not found: " bucket "/" filename))))
     (log/debugf "Obtaining reader to blob %s/%s" bucket filename)
     (-> blob
         (.reader
@@ -126,8 +129,8 @@
   Example: (construct-reader /home foo bar) will return a reader to '/home/foo/bar'
            (construct-reader gs:// bucket dir file) will return a reader to gs://bucket/dir/file"
   [protocol & path-segs]
-  (log/debug :fn :construct-reader :msg "Constructing reader"
-             :protocol protocol :path-segs path-segs)
+  (log/info :fn :construct-reader :msg "Constructing reader"
+            :protocol protocol :path-segs path-segs)
   (cond (= "gs://" protocol) (apply google-storage-line-reader path-segs)
         (= "file://" protocol) (io/reader (apply io/file path-segs))
         :else (io/reader (apply io/file path-segs))))
@@ -346,8 +349,6 @@
                                (list-files storage-protocol
                                            bucket
                                            (str (:release_directory parsed-diff-files-msg) "/")))
-
-
                  #_#__ (log/info :msg "file-list first 10" :file-list (->> file-list (take 10) (into [])))
                  files (filter-files (:filter-string procedure) file-list)
                  #_#__ (log/info :msg "filtered files" :files (->> files (into [])))]
@@ -358,25 +359,24 @@
                 :order-entry order-entry
                 :event-type (:event-type procedure)})))
          flatten-one-level
-         (process-files storage-protocol release-date)
-         #_(map #(process-file storage-protocol release-date %)))))
+         (process-files storage-protocol release-date))))
 
 (defn process-clinvar-drop
   "Constructs a lazy sequence of output messages based on an input drop file
    from the upstream DSP service.
    Caller should avoid realizing whole sequence into memory."
     ;; TODO SPEC
-  [msg {:keys [storage-protocol]
-        :or {storage-protocol "gs://"}}]
-                                        ; 1. parse the drop message to determine where the files are
-                                        ; this will return the folder and bucket and file manifest
-  (log/info {:fn :process-clinvar-drop :msg "Processing drop message" :drop-message msg})
-  (let [parsed-drop-record (if (string? msg) (json/parse-string msg true) msg)
-        release-date (:release_date parsed-drop-record)]
-    (lazy-cat
-     [(create-sentinel-message release-date :start)]
-     (generate-messages-from-diff parsed-drop-record storage-protocol)
-     [(create-sentinel-message release-date :end)])))
+  [{:keys [storage_protocol
+           release_date]
+    :or {storage_protocol "gs://"}
+    :as release_info}]
+  (when (not (map? release_info))
+    (throw (ex-info "Must provide map" {:msg release_info})))
+  (log/info {:fn :process-clinvar-drop :msg "Processing drop message" :drop-message release_info})
+  (lazy-cat
+   [(create-sentinel-message release_date :start)]
+   (generate-messages-from-diff release_info storage_protocol)
+   [(create-sentinel-message release_date :end)]))
 
 (defn consumer-lazy-seq-bounded
   "Consumes a single-partition topic.
@@ -460,8 +460,8 @@
               input-type-counters (atom {})
               output-type-counters (atom {})]
           (doseq [filtered-message
-                  (->> (process-clinvar-drop m-value
-                                             (select-keys opts [:STORAGE_PROTOCOL]))
+                  (->> (process-clinvar-drop (assoc m-value
+                                                    :storage_protocol (:STORAGE_PROTOCOL opts)))
                        ;; process-clinvar-drop returns [{:key ... :value ...}]
                        (map #(json-parse-key-in % [:value :content :content]))
 
@@ -551,12 +551,11 @@
                          :bucket "clinvar-releases",
                          :release_directory
                          "/Users/kferrite/dev/genegraph/clinvar-releases/2023-04-10"}
-
         opts {:storage-protocol "gs://"}
         reached-variations (atom false)
         passed-variations (atom false)]
     (with-open [writer (io/writer "re-generated-variations.txt")]
-      (doseq [msg (->> (process-clinvar-drop release-message opts)
+      (doseq [msg (->> (process-clinvar-drop (merge release-message opts))
                        (filter #(= "variation" (-> % :value :content :entity_type))))
               :while (or (not @reached-variations)
                          (not @passed-variations))]
@@ -573,9 +572,20 @@
   ;; lazy seq over entities in bucket
   (def msgs (->> (generate-messages-from-diff
                   {:release_date "2023-04-10"
-                   :bucket "/Users/kferrite/dev/clinvar-releases/"
+                   :bucket "clinvar-releases"
                    :release_directory "2023-04-10"}
-                  "file://")))
+                  "gs://")))
+
+  ;; for variations only, expecting 2210627 records
+  (with-open [writer (io/writer "re-generated-scv.txt")]
+    (doseq [msg (generate-messages-from-diff
+                 {:release_date "2023-04-10"
+                  :bucket "clinvar-releases"
+                  :release_directory "2023-04-10"}
+                 "gs://")]
+      (.write writer (json/generate-string msg))
+      (.write writer "\n")))
+
 
   ;; lazy seq over entitites in local directory
   (def msgs (->> (generate-messages-from-diff
@@ -597,3 +607,23 @@
         count)
    ;; 2210627
    ))
+
+(comment
+  "Validate counts from local file and bucket match. Eliminate bug in lazy-line-reader*"
+  (let [rel-path-list (list-files "file://" "/Users/kferrite/dev/clinvar-releases/2023-04-10/") ;; trailing slash
+        rel-path-list (filter #(or (.contains % "created")
+                                   (.contains % "updated")
+                                   (.contains % "deleted"))
+                              rel-path-list)
+        local-args  [construct-reader "file://" "/Users/kferrite/dev/clinvar-releases/2023-04-10"]
+        bucket-args [construct-reader "gs://" "clinvar-releases"]]
+    (doseq [rel-path rel-path-list]
+      (log/info :rel-path rel-path)
+      (let [local-count (count (lazy-line-reader-threaded (apply partial (flatten [local-args rel-path]))))
+            bucket-count (count (lazy-line-reader-threaded (apply partial (flatten [bucket-args
+                                                                                    (str "2023-04-10/" rel-path)]))))]
+        (assert (= local-count bucket-count)
+                {:msg "Counts don't match"
+                 :rel-path rel-path
+                 :local-count local-count
+                 :bucket-count bucket-count})))))
