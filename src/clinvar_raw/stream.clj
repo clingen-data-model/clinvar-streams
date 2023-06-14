@@ -342,16 +342,11 @@
   (let [release-date (:release_date parsed-diff-files-msg)]
     (->> (for [procedure event-procedures]
            (let [bucket (:bucket parsed-diff-files-msg)
-                ;;  file-list (or (:files parsed-diff-files-msg)
-                ;;                (->> (str (:release_directory parsed-diff-files-msg) "/")
-                ;;                     (gcs/list-all-files bucket)))
                  file-list (or (:files parsed-diff-files-msg)
                                (list-files storage-protocol
                                            bucket
                                            (str (:release_directory parsed-diff-files-msg) "/")))
-                 #_#__ (log/info :msg "file-list first 10" :file-list (->> file-list (take 10) (into [])))
-                 files (filter-files (:filter-string procedure) file-list)
-                 #_#__ (log/info :msg "filtered files" :files (->> files (into [])))]
+                 files (filter-files (:filter-string procedure) file-list)]
              (for [order-entry (:order procedure)
                    file-path (filter-files (:type order-entry) files)]
                {:bucket bucket
