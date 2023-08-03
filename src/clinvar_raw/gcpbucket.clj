@@ -22,13 +22,18 @@
   "The Google Cloud Storage URL for bucket operations."
   (str storage-url "b/"))
 
-(def ^:private google-adc-token
-  "Nil or a token for the Application Default Credentials."
+(def ^:private google-adc-GoogleCredentials
   (delay
     (some-> (GoogleCredentials/getApplicationDefault)
             (.createScoped
-             ["https://www.googleapis.com/auth/devstorage.read_only"])
-            .refreshAccessToken .getTokenValue)))
+             ["https://www.googleapis.com/auth/devstorage.read_only"]))))
+
+(defn google-adc-token
+  "Nil or a token for the Application Default Credentials."
+  []
+  (let [creds @google-adc-GoogleCredentials]
+    (.refreshIfExpired creds)
+    (-> creds .getAccessToken .getTokenValue)))
 
 (defn auth-header
   "Return an Authorization header map with bearer TOKEN."
@@ -43,7 +48,7 @@
    (let [params  {:delimiter "/" :maxResults 999 :prefix prefix}
          request {:as           :stream
                   :content-type :application/json
-                  :headers      (auth-header @google-adc-token)
+                  :headers      (auth-header (google-adc-token))
                   :method       :get
                   :query-params params
                   :url          (str bucket-url bucket "/o")}]
@@ -70,7 +75,7 @@
   (let [params  {:delimiter "/" :maxResults 999 :prefix prefix}
         request {:as           :stream
                  :content-type :application/json
-                 :headers      (auth-header @google-adc-token)
+                 :headers      (auth-header (google-adc-token))
                  :method       :get
                  :query-params params
                  :url          (str bucket-url bucket "/o")}]
@@ -81,7 +86,7 @@
                         http/request deref :body io/reader (json/parse-stream true))]
                 (if (some? error)
                   (throw (ex-info (str "Exception expanding items in storage bucket '" bucket
-                                        "' from '" prefix "'.") {:error error}))
+                                       "' from '" prefix "'.") {:error error}))
                   (lazy-cat (map :name items)
                             (when nextPageToken
                               (get-cloud-storage-items nextPageToken))))))]
@@ -94,7 +99,7 @@
   (loop [prefixes (list-prefixes bucket prefix)]
     (let [new-prefixes (flatten (map #(list-prefixes bucket %) prefixes))]
       (if (not (empty? new-prefixes))
-        (recur new-prefixes)        
+        (recur new-prefixes)
         prefixes))))
 
 (defn list-all-files
@@ -103,4 +108,3 @@
   (->> (expand-all-prefixes bucket prefix)
        (map #(list-items bucket %))
        flatten))
-

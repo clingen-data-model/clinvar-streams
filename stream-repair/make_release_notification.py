@@ -2,6 +2,7 @@ import json
 import re
 import os
 import pathlib
+from typing import Union
 import google.cloud
 from google.cloud import storage
 
@@ -37,7 +38,6 @@ def is_a_release_file(filename: str) -> bool:
         filename = blob_path(filename)
     # Is a diff file
     terms = filename.split("/")
-    print(terms)
     if (len(terms) == 4 and
             terms[2] in ["created", "updated", "deleted"]):
         return True
@@ -52,7 +52,7 @@ def is_a_release_file(filename: str) -> bool:
     return False
 
 
-def generate_notif_for_release(client, bucket, release_prefix):
+def generate_notif_for_release(client, bucket, release_prefix, release_date=None):
     # List all files in bucket with release prefix
     blob_iterator = client.list_blobs(bucket,
                                       prefix=ensure_trailing_slash(release_prefix))
@@ -61,15 +61,18 @@ def generate_notif_for_release(client, bucket, release_prefix):
     # Get the release date stored in this release directory
     release_date_files = list(filter(lambda blob: blob.name.endswith("release_date.txt"),
                                      all_blobs))
-    assert len(release_date_files) == 1, str(
-        "release_date_files len was not 1" + " " + release_prefix)
-    release_date_file = release_date_files[0]
-    with release_date_file.open() as f:
-        stored_release_date = f.read().strip()
+    if release_date is None:
+        if len(release_date_files) != 1:
+            raise RuntimeError(
+                f"release_date not provided and {release_prefix} "
+                "did not contain release-date.txt")
+        release_date_file = release_date_files[0]
+        with release_date_file.open() as f:
+            release_date = f.read().strip()
 
     # Generate structure
     notification_msg = {
-        "release_date": stored_release_date,
+        "release_date": release_date,
         "bucket": bucket_name,
         "files": [b.name for b in all_blobs]
     }
@@ -174,7 +177,10 @@ def release_to_dir_mapping(notifs: list) -> list:
     return out
 
 
-def release_dir_map_to_notifications(client, bucket, release_dir_mappings: list) -> list:
+def release_dir_map_to_notifications(
+        client,
+        bucket: Union[str, storage.Bucket],
+        release_dir_mappings: list) -> list:
     """
     Takes a list of (release_date, dirname) and generates and
     returns the notification messages in the same order
@@ -482,34 +488,33 @@ def validate_20220620_20220626():
 # validate_notifs_equal(topic_notifs, regenerated_topic_notifs)
 
 
-# Generate notifications based on a mappings file
-mapping_file = "broad-dsp-clinvar_release_mappings_FIXED.txt"
-generated_notifications_file = "broad-dsp-clinvar_generated_notifications.txt"
-release_dir_mappings = read_release_mappings(mapping_file)
-generated_notifications = release_dir_map_to_notifications(storage_client,
-                                                           bucket_name,
-                                                           release_dir_mappings)
-with open(generated_notifications_file, "w") as fout:
-    for notif in generated_notifications:
-        fout.write(json.dumps(notif))
-        fout.write("\n")
+# # Generate notifications based on a mappings file
+# mapping_file = "broad-dsp-clinvar_release_mappings_FIXED.txt"
+# generated_notifications_file = "broad-dsp-clinvar_generated_notifications.txt"
+# release_dir_mappings = read_release_mappings(mapping_file)
+# generated_notifications = release_dir_map_to_notifications(storage_client,
+#                                                            bucket_name,
+#                                                            release_dir_mappings)
+# with open(generated_notifications_file, "w") as fout:
+#     for notif in generated_notifications:
+#         fout.write(json.dumps(notif))
+#         fout.write("\n")
 
-
-# Validate that the generated notifications matches a file of the topic of those same mappings
-received_notifications_file = "broad-dsp-clinvar_backup_20221201.txt"
-with open(received_notifications_file) as f:
-    received_notifications = [json.loads(line.strip()) for line in f]
-assert len(received_notifications) == len(generated_notifications)
-exceptions = []
-for (received, generated) in zip(received_notifications, generated_notifications):
-    try:
-        validate_notifs_equal([received], [generated])
-    except Exception as e:
-        exceptions.append({
-            "received": received,
-            "generated": generated,
-            "exception": e
-        })
+# # Validate that the generated notifications matches a file of the topic of those same mappings
+# received_notifications_file = "broad-dsp-clinvar_backup_20221201.txt"
+# with open(received_notifications_file) as f:
+#     received_notifications = [json.loads(line.strip()) for line in f]
+# assert len(received_notifications) == len(generated_notifications)
+# exceptions = []
+# for (received, generated) in zip(received_notifications, generated_notifications):
+#     try:
+#         validate_notifs_equal([received], [generated])
+#     except Exception as e:
+#         exceptions.append({
+#             "received": received,
+#             "generated": generated,
+#             "exception": e
+#         })
 
 
 # Check record counts in diffs

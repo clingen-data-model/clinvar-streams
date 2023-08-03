@@ -1,20 +1,21 @@
 (ns clinvar-raw.stream
   (:require [cheshire.core :as json]
             [clinvar-raw.config :as config]
-            [clinvar-raw.ingest :as ingest]
             [clinvar-raw.gcpbucket :as gcs]
+            [clinvar-raw.ingest :as ingest]
             [clinvar-streams.storage.rocksdb :as rocksdb]
             [clinvar-streams.stream-utils :refer [get-max-offset
                                                   get-min-offset]]
             [clojure.core.async :as async]
             [clojure.java.io :as io]
             [clojure.spec.alpha :as spec]
+            [clojure.string :as str]
             [jackdaw.client :as jc]
             [jackdaw.data :as jd]
+            [me.raynes.fs :as fs]
             [mount.core :refer [defstate]]
             [taoensso.timbre :as log])
-  (:import (com.google.cloud.storage
-            BlobId StorageOptions Blob$BlobSourceOption)
+  (:import (com.google.cloud.storage Blob$BlobSourceOption BlobId StorageOptions)
            (java.io BufferedReader)
            (java.nio.channels Channels)
            (java.time Duration)
@@ -68,6 +69,9 @@
   (log/debugf "Opening gs://%s/%s" bucket filename)
   (let [blob-id (BlobId/of bucket filename)
         blob (.get gc-storage blob-id)]
+    (when (nil? blob)
+      (throw (java.io.FileNotFoundException.
+              (str "GCS blob not found: " bucket "/" filename))))
     (log/debugf "Obtaining reader to blob %s/%s" bucket filename)
     (-> blob
         (.reader
@@ -252,7 +256,7 @@
 
 (defn process-file [storage-protocol release-date event]
   (let [{:keys [bucket path order-entry event-type]} event]
-    (log/info :fn :generate-messages-from-diff/process-file 
+    (log/info :fn :generate-messages-from-diff/process-file
               :bucket bucket
               :path path
               :order-entry order-entry
@@ -275,19 +279,73 @@
     (lazy-cat (process-file storage-protocol release-date (first files-to-process))
               (process-files storage-protocol release-date (rest files-to-process)))))
 
+(defn trim-prefix
+  "If S starts with PREFIX, return substring of S after PREFIX"
+  [s prefix]
+  (if (.startsWith s prefix)
+    (subs s (.length prefix))
+    s))
+
+(defn list-files
+  "For storage-protocol gs://, path segs should start with the bucket,
+    since this is part of the full URL for objects.
+
+  For storage-protocol file://, works in the same way as gs, paths returned
+   are relative to the first path segment (bucket for gs) "
+  [storage-protocol & path-segs]
+  #_(log/info :fn :list-files :path-segs path-segs)
+  (assert (< 0 (count path-segs)) "Must provide path or path segments")
+  (case storage-protocol
+    "gs://" (let [[bucket & path-segs] path-segs]
+              (gcs/list-all-files bucket (str/join "/" path-segs)))
+    "file://" (let [[root-path & relative-segs] path-segs]
+                (->> (fs/list-dir (str/join "/" path-segs))
+                     (mapv (fn [f]
+                             (let [path (.getPath f)
+                                   rel-path (trim-prefix (.getPath f) root-path)]
+                               (if (.isDirectory f)
+                                 ;; Expand relative path listing into this dir, anchored to same root path
+                                 (list-files storage-protocol root-path rel-path)
+                                 rel-path))))
+                     flatten))))
+
+(defn xor [& vals]
+  (->> vals
+       (map #(when % true))
+       (filter identity)
+       (#(= 1 (count %)))))
+(spec/def ::release_date (spec/and string? seq))
+(spec/def ::files (spec/coll-of string?))
+(spec/def ::release_directory (spec/and string? seq))
+;; Idea for :files :release_directory mutual exclusion from here:
+;; https://stackoverflow.com/a/43374087/2172133
+(spec/def ::parsed-diff-msg (spec/and (spec/keys :req-un [::release_date
+                                                          (or ::files
+                                                              ::release_directory)])
+                                      #(xor (:files %) (:release_directory %))))
+
+(spec/def ::storage-protocol #(#{"file://" "gs://"} %))
+
 (defn generate-messages-from-diff
   "Takes a diff notification message, and returns a lazy seq of
    all the output messages in order for this diffed release."
   [parsed-diff-files-msg storage-protocol]
+  (when-not (spec/valid? ::parsed-diff-msg parsed-diff-files-msg)
+    (throw (ex-info "Invalid parsed-diff-files-msg"
+                    {:spec/explain (spec/explain ::parsed-diff-msg parsed-diff-files-msg)})))
+  (when-not (spec/valid? ::storage-protocol storage-protocol)
+    (throw (ex-info "Invalid storage-protocol"
+                    {:spec/explain (spec/explain ::storage-protocol storage-protocol)})))
   (log/info :fn :generate-messages-from-diff
-             :parsed-diff-files-message parsed-diff-files-msg
-             :storage-protocol storage-protocol)
+            :parsed-diff-files-message parsed-diff-files-msg
+            :storage-protocol storage-protocol)
   (let [release-date (:release_date parsed-diff-files-msg)]
     (->> (for [procedure event-procedures]
            (let [bucket (:bucket parsed-diff-files-msg)
                  file-list (or (:files parsed-diff-files-msg)
-                               (->> (str (:release_directory parsed-diff-files-msg) "/")
-                                    (gcs/list-all-files bucket)))
+                               (list-files storage-protocol
+                                           bucket
+                                           (str (:release_directory parsed-diff-files-msg) "/")))
                  files (filter-files (:filter-string procedure) file-list)]
              (for [order-entry (:order procedure)
                    file-path (filter-files (:type order-entry) files)]
@@ -296,25 +354,24 @@
                 :order-entry order-entry
                 :event-type (:event-type procedure)})))
          flatten-one-level
-         (process-files storage-protocol release-date)
-         #_(map #(process-file storage-protocol release-date %)))))
+         (process-files storage-protocol release-date))))
 
 (defn process-clinvar-drop
-    "Constructs a lazy sequence of output messages based on an input drop file
+  "Constructs a lazy sequence of output messages based on an input drop file
    from the upstream DSP service.
    Caller should avoid realizing whole sequence into memory."
     ;; TODO SPEC
-  [msg {:keys [storage-protocol]
-        :or {storage-protocol "gs://"}}]
-                                        ; 1. parse the drop message to determine where the files are
-                                        ; this will return the folder and bucket and file manifest
-    (log/info {:fn :process-clinvar-drop :msg "Processing drop message" :drop-message msg})
-    (let [parsed-drop-record (if (string? msg) (json/parse-string msg true) msg)
-          release-date (:release_date parsed-drop-record)]
-      (lazy-cat
-       [(create-sentinel-message release-date :start)]
-       (generate-messages-from-diff parsed-drop-record storage-protocol)
-       [(create-sentinel-message release-date :end)])))
+  [{:keys [storage_protocol
+           release_date]
+    :or {storage_protocol "gs://"}
+    :as release_info}]
+  (when (not (map? release_info))
+    (throw (ex-info "Must provide map" {:msg release_info})))
+  (log/info {:fn :process-clinvar-drop :msg "Processing drop message" :drop-message release_info})
+  (lazy-cat
+   [(create-sentinel-message release_date :start)]
+   (generate-messages-from-diff release_info storage_protocol)
+   [(create-sentinel-message release_date :end)]))
 
 (defn consumer-lazy-seq-bounded
   "Consumes a single-partition topic.
@@ -388,7 +445,7 @@
       (when (:KAFKA_RESET_CONSUMER_OFFSET opts)
         (log/info "Resetting to start of input topic")
         (jc/seek-to-beginning-eager consumer))
-      (log/info "Subscribed to consumer topic " )
+      (log/info "Subscribed to consumer topic ")
       (doseq [m (cond->> (consumer-lazy-seq-infinite consumer)
                   max-input-count (take max-input-count))
               :while @listening-for-drop]
@@ -398,8 +455,8 @@
               input-type-counters (atom {})
               output-type-counters (atom {})]
           (doseq [filtered-message
-                  (->> (process-clinvar-drop m-value
-                                             (select-keys opts [:STORAGE_PROTOCOL]))
+                  (->> (process-clinvar-drop (assoc m-value
+                                                    :storage_protocol (:STORAGE_PROTOCOL opts)))
                        ;; process-clinvar-drop returns [{:key ... :value ...}]
                        (map #(json-parse-key-in % [:value :content :content]))
 
@@ -478,3 +535,90 @@
   (let [opts config/env-config
         kafka-opts (config/kafka-config opts)]
     (start-streaming opts kafka-opts)))
+
+
+(comment
+  "Using functions to generate entity stream locally, no kafka"
+  (let [release-message {:release_date "2023-04-10",
+                         :bucket "clinvar-releases",
+                         :release_directory "2023-04-10"}
+        release-message {:release_date "2023-04-10",
+                         :bucket "clinvar-releases",
+                         :release_directory
+                         "/Users/kferrite/dev/genegraph/clinvar-releases/2023-04-10"}
+        opts {:storage-protocol "gs://"}
+        reached-variations (atom false)
+        passed-variations (atom false)]
+    (with-open [writer (io/writer "re-generated-variations.txt")]
+      (doseq [msg (->> (process-clinvar-drop (merge release-message opts))
+                       (filter #(= "variation" (-> % :value :content :entity_type))))
+              :while (or (not @reached-variations)
+                         (not @passed-variations))]
+        (let [entity_type (-> msg :value :content :entity_type)]
+          (when (= "variation" entity_type)
+            (reset! reached-variations true)
+            (.write writer (json/generate-string msg))
+            (.write writer "\n"))
+          (when (and @reached-variations
+                     (not= "variation" entity_type))
+            (reset! passed-variations true)))))))
+
+(comment
+  ;; lazy seq over entities in bucket
+  (def msgs (->> (generate-messages-from-diff
+                  {:release_date "2023-04-10"
+                   :bucket "clinvar-releases"
+                   :release_directory "2023-04-10"}
+                  "gs://")))
+
+  ;; for variations only, expecting 2210627 records
+  (with-open [writer (io/writer "re-generated-scv.txt")]
+    (doseq [msg (generate-messages-from-diff
+                 {:release_date "2023-04-10"
+                  :bucket "clinvar-releases"
+                  :release_directory "2023-04-10"}
+                 "gs://")]
+      (.write writer (json/generate-string msg))
+      (.write writer "\n")))
+
+
+  ;; lazy seq over entitites in local directory
+  (def msgs (->> (generate-messages-from-diff
+                  {:release_date "2023-04-10"
+                   :bucket "/Users/kferrite/dev/clinvar-releases/"
+                   :release_directory "2023-04-10"}
+                  "file://")))
+
+  (first msgs)
+
+
+  (time
+   (->> (generate-messages-from-diff
+         {:release_date "2023-04-10"
+          :bucket "/Users/kferrite/dev/clinvar-releases/"
+          :release_directory "2023-04-10"}
+         "file://")
+        #_(take (long 10000))
+        count)
+   ;; 2210627
+   ))
+
+(comment
+  "Validate counts from local file and bucket match. Eliminate bug in lazy-line-reader*"
+  (let [rel-path-list (list-files "file://" "/Users/kferrite/dev/clinvar-releases/2023-04-10/") ;; trailing slash
+        rel-path-list (filter #(or (.contains % "created")
+                                   (.contains % "updated")
+                                   (.contains % "deleted"))
+                              rel-path-list)
+        local-args  [construct-reader "file://" "/Users/kferrite/dev/clinvar-releases/2023-04-10"]
+        bucket-args [construct-reader "gs://" "clinvar-releases"]]
+    (doseq [rel-path rel-path-list]
+      (log/info :rel-path rel-path)
+      (let [local-count (count (lazy-line-reader-threaded (apply partial (flatten [local-args rel-path]))))
+            bucket-count (count (lazy-line-reader-threaded (apply partial (flatten [bucket-args
+                                                                                    (str "2023-04-10/" rel-path)]))))]
+        (assert (= local-count bucket-count)
+                {:msg "Counts don't match"
+                 :rel-path rel-path
+                 :local-count local-count
+                 :bucket-count bucket-count})))))
